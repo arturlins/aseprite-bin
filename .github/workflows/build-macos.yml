@@ -1,0 +1,52 @@
+name: Build (macOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Aseprite version to build (e.g. v1.3.18.1). Leave empty for the latest release."
+        required: false
+        type: string
+
+# Aseprite's EULA forbids redistributing binaries. This workflow is manual only
+# and must never publish a Release, a Package, or anything outside of a
+# short-lived build artifact.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-macos
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    # macos-15 is the standard arm64 runner: free for public repositories.
+    runs-on: macos-15
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install ninja
+
+      - name: Resolve version
+        id: resolve
+        uses: ./.github/actions/resolve-version
+        with:
+          version: ${{ inputs.version }}
+
+      - name: Build
+        run: ./build.sh
+        env:
+          ASEPRITE_VERSION: ${{ steps.resolve.outputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-${{ steps.resolve.outputs.version }}-macos-arm64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
