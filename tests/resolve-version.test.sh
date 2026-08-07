@@ -70,6 +70,52 @@ STUB
   chmod +x "$1/curl"
 }
 
+# Creates a fake `curl` in $1 that requires an "Authorization: Bearer <token>"
+# header on every call, failing the call otherwise. Exists to prove the
+# GITHUB_TOKEN branch of api() -- the *only* branch a real CI run ever
+# exercises -- actually attaches the header, rather than merely taking a
+# different code path. Without this, a typo dropping the header would pass
+# every other test and only fail on a real runner.
+make_stub_curl_requires_auth() {
+  mkdir -p "$1"
+  local token="$2" latest="$3" existing="$4"
+  cat > "$1/curl" <<STUB
+#!/usr/bin/env bash
+has_auth=0
+prev=""
+for arg in "\$@"; do
+  if [ "\$prev" = "-H" ] && [ "\$arg" = "Authorization: Bearer $token" ]; then
+    has_auth=1
+  fi
+  prev="\$arg"
+done
+if [ "\$has_auth" != "1" ]; then
+  echo "stub: missing Authorization header" >&2
+  exit 22
+fi
+url="\${!#}"
+case "\$url" in
+  */releases/latest)
+    printf '{"tag_name": "%s", "prerelease": false}\n' "$latest"
+    ;;
+  */git/ref/tags/*)
+    tag="\${url##*/}"
+    for t in $existing; do
+      if [ "\$t" = "\$tag" ]; then
+        printf '{"ref": "refs/tags/%s"}\n' "\$tag"
+        exit 0
+      fi
+    done
+    exit 22
+    ;;
+  *)
+    exit 22
+    ;;
+esac
+STUB
+  chmod +x "$1/curl"
+}
+
 # run_case <name> <expected_status> <expected_stdout> <latest> <existing_tags> [args...]
 # Captures stderr into the global $last_stderr so callers that need to make
 # additional assertions about it (see run_case_stderr below) can, without
@@ -83,7 +129,11 @@ run_case() {
   make_stub_curl "$tmp/bin" "$latest" "$existing"
 
   local out status
-  out="$(PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$@" 2>"$tmp/stderr")"
+  # GITHUB_TOKEN and ASEPRITE_REPO are explicitly cleared (not just left
+  # alone) so a developer with GITHUB_TOKEN exported in their shell -- very
+  # common -- doesn't silently exercise the authenticated branch of api()
+  # here instead of the one these default cases are meant to cover.
+  out="$(unset GITHUB_TOKEN ASEPRITE_REPO; PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$@" 2>"$tmp/stderr")"
   status=$?
   last_stderr="$(cat "$tmp/stderr")"
   rm -rf "$tmp"
@@ -129,8 +179,21 @@ ALL_TAGS="v1.3.18.1 v1.3.18 v1.3.18-beta1 v1.2.40"
 run_case "sem argumento resolve o ultimo release" \
   0 "v1.3.18.1" "v1.3.18.1" "$ALL_TAGS"
 
+# The composite action always passes one argument to this script, and it can
+# be an empty string (`"${REQUESTED_VERSION}"` when the workflow_dispatch
+# input is left blank) -- distinct from the zero-argument case above, and
+# the product's real happy path.
+run_case "argumento vazio explicito resolve o ultimo release" \
+  0 "v1.3.18.1" "v1.3.18.1" "$ALL_TAGS" ""
+
 run_case "versao explicita e respeitada" \
   0 "v1.3.18" "v1.3.18.1" "$ALL_TAGS" "v1.3.18"
+
+# workflow_dispatch's text input does not trim, so a user typing a leading
+# space must still resolve correctly instead of failing with a message that
+# reads like a bug in this script.
+run_case "espaco em branco no argumento e removido" \
+  0 "v1.3.18" "v1.3.18.1" "$ALL_TAGS" " v1.3.18"
 
 run_case "versao sem prefixo v e normalizada" \
   0 "v1.2.40" "v1.3.18.1" "$ALL_TAGS" "1.2.40"
@@ -162,7 +225,7 @@ name="versao multi-linha e rejeitada mesmo com tag valida na primeira linha"
 tmp="$(mktemp -d)"
 make_stub_curl_permissive_tags "$tmp/bin"
 malicious="$(printf 'v1.3.18.1\nmalicious-payload-line')"
-out="$(PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$malicious" 2>/dev/null)"
+out="$(unset GITHUB_TOKEN ASEPRITE_REPO; PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$malicious" 2>/dev/null)"
 status=$?
 rm -rf "$tmp"
 if [ "$status" = "1" ] && [ "$out" = "" ]; then
@@ -172,6 +235,27 @@ else
   fail=$((fail + 1))
   printf 'FAIL - %s\n       want status=1 stdout=""\n       got  status=%s stdout=%q\n' \
     "$name" "$status" "$out"
+fi
+
+# Custom case (not run_case): GITHUB_TOKEN is set on purpose here -- this is
+# the branch of api() that every real CI run actually takes, and until now
+# nothing covered it. A stub that requires the Authorization header to be
+# present proves the header is really sent, not just that GITHUB_TOKEN was
+# read.
+name="GITHUB_TOKEN definido envia o header Authorization"
+tmp="$(mktemp -d)"
+make_stub_curl_requires_auth "$tmp/bin" "test-token-123" "v1.3.18.1" "$ALL_TAGS"
+out="$(PATH="$tmp/bin:$PATH" GITHUB_TOKEN="test-token-123" bash "$SCRIPT" 2>"$tmp/stderr")"
+status=$?
+stderr_content="$(cat "$tmp/stderr")"
+rm -rf "$tmp"
+if [ "$status" = "0" ] && [ "$out" = "v1.3.18.1" ]; then
+  pass=$((pass + 1))
+  printf 'ok   - %s\n' "$name"
+else
+  fail=$((fail + 1))
+  printf 'FAIL - %s\n       want status=0 stdout="v1.3.18.1"\n       got  status=%s stdout=%q stderr=%q\n' \
+    "$name" "$status" "$out" "$stderr_content"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

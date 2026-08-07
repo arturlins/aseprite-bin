@@ -34,6 +34,8 @@ version="${1:-}"
 if [ -z "$version" ]; then
   if ! json="$(api "$API/releases/latest")"; then
     echo "error: could not query the latest release of $REPO" >&2
+    echo "       possible causes: no network access, GitHub API outage, or -- most likely" >&2
+    echo "       for an unauthenticated local run -- the 60 requests/hour rate limit was hit" >&2
     exit 1
   fi
   # `|| true` prevents `pipefail` + `set -e` from killing the script right
@@ -49,6 +51,12 @@ if [ -z "$version" ]; then
     exit 1
   fi
 fi
+
+# Trim whitespace before normalization: the workflow_dispatch text input
+# does not trim, so a leading/trailing space in an otherwise-valid value
+# would otherwise fail the regex below with a message that reads like a bug
+# in this script rather than a UI quirk.
+version="$(printf '%s' "$version" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
 
 case "$version" in
   v*) ;;
@@ -67,6 +75,9 @@ fi
 
 if ! api "$API/git/ref/tags/$version" >/dev/null; then
   echo "error: tag '$version' does not exist in $REPO" >&2
+  echo "       (or the query failed: no network access, GitHub API outage, or --" >&2
+  echo "       most likely for an unauthenticated local run -- the 60 requests/hour" >&2
+  echo "       rate limit was hit)" >&2
   exit 1
 fi
 

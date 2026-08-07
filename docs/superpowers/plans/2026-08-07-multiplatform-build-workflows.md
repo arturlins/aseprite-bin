@@ -1,5 +1,13 @@
 # Aseprite Multi-Platform Build Workflows — Implementation Plan
 
+> **Historical planning document.** This plan predates several rounds of
+> code review and fixes. Its embedded code blocks (e.g. the `build.cmd`
+> packaging step, the resolver test file's case count, the inline `xcrun`
+> call) have drifted from what actually shipped and are not being kept in
+> sync going forward. Where this document and the committed code disagree,
+> **the committed code is authoritative.** It is kept for the decisions and
+> rationale it records, not as a spec of the current state.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Corrigir a resolução da versão do Aseprite (último *release*, não última *tag*) e separar o build em três workflows independentes por sistema operacional — Windows (uso diário), Linux e macOS arm64 (à prova de futuro) — mantendo o fluxo estritamente manual conforme o EULA.

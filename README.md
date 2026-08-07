@@ -62,7 +62,8 @@ O campo `version` é opcional:
 
 ### 4. Aguarde a conclusão e abra a execução
 
-O build leva em torno de 15 a 25 minutos, dependendo da plataforma.
+O tempo de build varia por plataforma: cerca de 24 minutos no Windows, 13 no
+Linux e 10 no macOS.
 
 ![step4](images/step4.png)
 
@@ -76,9 +77,12 @@ Para compilar uma versão nova depois, repita os passos 3 a 5.
 
 ### Windows
 
-O artifact é um `.zip`. Extraia e execute `aseprite.exe`. O `aseprite.ini`
-incluso faz o programa se comportar como portable, guardando as configurações
-na própria pasta.
+O artifact é um `.zip` contendo a pasta `aseprite-v1.3.18.1-windows-x64`:
+
+    aseprite-v1.3.18.1-windows-x64\aseprite.exe
+
+O `aseprite.ini` incluso faz o programa se comportar como portable, guardando
+as configurações na própria pasta.
 
 ### Linux
 
@@ -136,7 +140,7 @@ Os scripts sempre re-clonam o Aseprite na versão exata solicitada, então cada
 execução parte de uma árvore limpa. O download da Skia é reaproveitado entre
 execuções.
 
-As dependências de cada plataforma estão no [INSTALL.md](INSTALL.md) oficial
+As dependências de cada plataforma estão no [INSTALL.md][] oficial
 do Aseprite.
 
 ## Como a versão é resolvida
@@ -164,6 +168,7 @@ somente se você possui uma licença válida e não redistribua os binários
 gerados.
 
 [Aseprite]: https://github.com/aseprite/aseprite
+[INSTALL.md]: https://github.com/aseprite/aseprite/blob/main/INSTALL.md
 [EULA]: https://github.com/aseprite/aseprite/blob/main/EULA.txt
 [versions]: https://github.com/aseprite/aseprite/tags
 [download page]: https://www.aseprite.org/download/

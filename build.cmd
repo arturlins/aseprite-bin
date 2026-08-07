@@ -11,6 +11,22 @@ if "%ASEPRITE_VERSION%" equ "" (
   exit /b 1
 )
 
+rem *** Re-validate ASEPRITE_VERSION here too: the composite action enforces
+rem *** this format, but this script is also documented for direct/local use
+rem *** with a hand-set env var, which bypasses the resolver entirely. The
+rem *** value later reaches injection-capable sinks (a single-quoted
+rem *** PowerShell string, --branch, several unquoted directory names), so
+rem *** reject anything that doesn't match before any of that happens. Batch
+rem *** has no regex, so delegate to PowerShell and act on its exit code;
+rem *** read the value via $env: rather than string-interpolating it into
+rem *** the -Command text, so the check itself isn't vulnerable to the same
+rem *** injection it is guarding against.
+powershell -NoProfile -Command "if ($env:ASEPRITE_VERSION -cmatch '^v[0-9]+(\.[0-9]+){1,3}(-beta[0-9]+)?$') { exit 0 } else { exit 1 }"
+if errorlevel 1 (
+  echo ERROR: invalid ASEPRITE_VERSION "%ASEPRITE_VERSION%" ^(expected e.g. v1.3.18.1 or v1.3.18-beta1^)
+  exit /b 1
+)
+
 set PATH="C:\Program Files\7-Zip";%PATH%
 
 where /q git.exe || (
@@ -61,11 +77,23 @@ call git clone --quiet --depth 1 --branch %ASEPRITE_VERSION% --recurse-submodule
 set ASEPRITE_VERSION_NUMBER=%ASEPRITE_VERSION:~1%
 powershell -NoProfile -Command "$p='aseprite/src/ver/CMakeLists.txt'; (Get-Content $p -Raw).Replace('1.x-dev','%ASEPRITE_VERSION_NUMBER%') | Set-Content $p -NoNewline" || echo failed to stamp version && exit /b 1
 
+rem *** If upstream ever renames the "1.x-dev" placeholder, the replace
+rem *** above becomes a silent no-op and the build would ship a binary
+rem *** reporting the wrong version -- assert it actually applied.
+findstr /C:"%ASEPRITE_VERSION_NUMBER%" aseprite\src\ver\CMakeLists.txt >nul || (
+  echo ERROR: version stamp failed -- "%ASEPRITE_VERSION_NUMBER%" not found in aseprite\src\ver\CMakeLists.txt
+  echo Upstream may have renamed the "1.x-dev" placeholder.
+  exit /b 1
+)
+
 
 rem *** download skia ***
 
 if exist aseprite\laf\misc\skia-tag.txt (
-  set /p SKIA_VERSION=<aseprite\laf\misc\skia-tag.txt
+  rem *** `set /p` strips the trailing CRLF but not a trailing space or a
+  rem *** BOM; read via PowerShell and strip all whitespace and a leading
+  rem *** BOM, the same way build.sh does with `tr -d '[:space:]'`.
+  for /f "usebackq delims=" %%v in (`powershell -NoProfile -Command "(Get-Content -Raw -Path 'aseprite\laf\misc\skia-tag.txt') -replace '[\s\uFEFF]',''"`) do set SKIA_VERSION=%%v
 ) else (
   if "%ASEPRITE_VERSION:beta=%" neq "%ASEPRITE_VERSION%" (
     set SKIA_VERSION=m124-08a5439a6b
@@ -76,12 +104,22 @@ if exist aseprite\laf\misc\skia-tag.txt (
 
 echo Using Skia %SKIA_VERSION%
 
-if not exist skia-%SKIA_VERSION% (
-  mkdir skia-%SKIA_VERSION%
+set SKIA_LIBRARY=skia-%SKIA_VERSION%\out\Release-x64\skia.lib
+
+rem *** Gate reuse on the library file, not just the directory: an
+rem *** interrupted local download or extraction leaves the directory
+rem *** present but incomplete, which would otherwise make every later run
+rem *** skip the download forever.
+if not exist "%SKIA_LIBRARY%" (
+  if not exist skia-%SKIA_VERSION% mkdir skia-%SKIA_VERSION%
   pushd skia-%SKIA_VERSION%
   curl -sfLO https://github.com/aseprite/skia/releases/download/%SKIA_VERSION%/Skia-Windows-Release-x64.zip || echo failed to download skia && exit /b 1
   %SZIP% x -y Skia-Windows-Release-x64.zip || echo failed to extract skia && exit /b 1
   popd
+  if not exist "%SKIA_LIBRARY%" (
+    echo ERROR: %SKIA_LIBRARY% not found after download; delete skia-%SKIA_VERSION% and re-run
+    exit /b 1
+  )
 )
 
 
@@ -106,7 +144,7 @@ cmake.exe                                                     ^
   -DSKIA_DIR=%CD%\skia-%SKIA_VERSION%                         ^
   -DSKIA_LIBRARY_DIR=%CD%\skia-%SKIA_VERSION%\out\Release-x64 ^
   -DSKIA_OPENGL_LIBRARY=                                      || echo failed to configure build && exit /b 1
-ninja.exe -C build || echo build failed && exit /b 1
+ninja.exe -C build aseprite || echo build failed && exit /b 1
 
 
 rem *** package ***

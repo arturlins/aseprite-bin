@@ -28,11 +28,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         run: |
           sudo apt-get update
+          # g++ is not dead weight even though build.sh forces clang: clang's
+          # -stdlib=libstdc++ needs libstdc++'s headers and library, which
+          # come from this package's GCC toolchain, not from clang itself.
           sudo apt-get install -y \
             g++ clang cmake ninja-build unzip \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev \
@@ -50,7 +55,7 @@ jobs:
           ASEPRITE_VERSION: ${{ steps.resolve.outputs.version }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: aseprite-${{ steps.resolve.outputs.version }}-linux-x64
           path: dist/*.tar.gz

@@ -16,6 +16,21 @@ if [ -z "${ASEPRITE_VERSION:-}" ]; then
   exit 1
 fi
 
+# Re-validate here too: the composite action enforces this format, but this
+# script is also documented for direct/local use with a hand-set env var,
+# which bypasses the resolver entirely. VERSION_NUMBER below is interpolated
+# into a perl s/// replacement (perl-interpolated) and into the Skia/tarball
+# URLs and paths, so a bad value must be rejected before any of that happens.
+# `[[ =~ ]]` matches the whole string ($VERSION_RE left unquoted so it is
+# treated as a regex, not a literal) -- unlike `grep`, which matches
+# line-by-line and would let a multi-line value slip a valid-looking first
+# line past this check.
+VERSION_RE='^v[0-9]+(\.[0-9]+){1,3}(-beta[0-9]+)?$'
+if ! [[ "$ASEPRITE_VERSION" =~ $VERSION_RE ]]; then
+  echo "error: invalid ASEPRITE_VERSION '$ASEPRITE_VERSION' (expected e.g. v1.3.18.1 or v1.3.18-beta1)" >&2
+  exit 1
+fi
+
 VERSION="$ASEPRITE_VERSION"
 VERSION_NUMBER="${VERSION#v}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -48,6 +63,7 @@ echo "Building Aseprite $VERSION for $OS-$ARCH"
 command -v cmake >/dev/null || { echo "error: cmake not found" >&2; exit 1; }
 command -v git   >/dev/null || { echo "error: git not found" >&2; exit 1; }
 command -v unzip >/dev/null || { echo "error: unzip not found" >&2; exit 1; }
+command -v perl  >/dev/null || { echo "error: perl not found" >&2; exit 1; }
 
 if ! command -v ninja >/dev/null; then
   echo "error: ninja not found (apt: ninja-build, brew: ninja)" >&2
@@ -66,6 +82,15 @@ git clone --quiet --depth 1 --branch "$VERSION" \
 # and BSD sed disagree on the syntax of -i.
 perl -pi -e "s/\Q1.x-dev\E/$VERSION_NUMBER/g" aseprite/src/ver/CMakeLists.txt
 
+# If upstream ever renames the "1.x-dev" placeholder, the substitution above
+# becomes a silent no-op and the build would ship a binary reporting the
+# wrong version -- assert it actually applied instead of finding out later.
+grep -qF "$VERSION_NUMBER" aseprite/src/ver/CMakeLists.txt || {
+  echo "error: version stamp failed -- '$VERSION_NUMBER' not found in aseprite/src/ver/CMakeLists.txt" >&2
+  echo "       upstream may have renamed the '1.x-dev' placeholder" >&2
+  exit 1
+}
+
 
 # --- skia ------------------------------------------------------------------
 
@@ -80,7 +105,12 @@ fi
 echo "Using Skia $SKIA_VERSION"
 
 SKIA_DIR="$ROOT/skia-$SKIA_VERSION"
-if [ ! -d "$SKIA_DIR" ]; then
+SKIA_LIBRARY_DIR="$SKIA_DIR/out/$SKIA_OUT"
+
+# Gate reuse on the library file, not just the directory: an interrupted
+# local download or extraction leaves the directory present but incomplete,
+# which would otherwise make every later run skip the download forever.
+if [ ! -f "$SKIA_LIBRARY_DIR/libskia.a" ]; then
   mkdir -p "$SKIA_DIR"
   downloaded=""
   for asset in $SKIA_ASSETS; do
@@ -98,12 +128,12 @@ if [ ! -d "$SKIA_DIR" ]; then
   fi
   unzip -q "$SKIA_DIR/skia.zip" -d "$SKIA_DIR"
   rm -f "$SKIA_DIR/skia.zip"
-fi
 
-SKIA_LIBRARY_DIR="$SKIA_DIR/out/$SKIA_OUT"
-if [ ! -f "$SKIA_LIBRARY_DIR/libskia.a" ]; then
-  echo "error: libskia.a not found in $SKIA_LIBRARY_DIR" >&2
-  exit 1
+  if [ ! -f "$SKIA_LIBRARY_DIR/libskia.a" ]; then
+    echo "error: libskia.a not found in $SKIA_LIBRARY_DIR after download" >&2
+    echo "       delete $SKIA_DIR and re-run to force a fresh download" >&2
+    exit 1
+  fi
 fi
 
 
@@ -171,6 +201,10 @@ else
   # ditto preserves the bundle structure, symlinks and permissions.
   ditto build/bin/Aseprite.app "$STAGE_DIR/Aseprite.app"
   cp -R aseprite/docs "$STAGE_DIR/docs"
+  # No aseprite.ini here on purpose: macOS .app bundles keep preferences
+  # under ~/Library, not next to the executable, so an ini inside
+  # Contents/MacOS would have no effect (unlike the Linux/Windows portable
+  # mode below).
 fi
 
 tar -czf "$TARBALL" -C "$STAGE" "aseprite-$VERSION-$OS-$ARCH"
