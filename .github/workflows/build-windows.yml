@@ -1,0 +1,49 @@
+name: Build (Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Aseprite version to build (e.g. v1.3.18.1). Leave empty for the latest release."
+        required: false
+        type: string
+
+# Aseprite's EULA forbids redistributing binaries. This workflow is manual only
+# and must never publish a Release, a Package, or anything outside of a
+# short-lived build artifact.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-windows
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: resolve
+        uses: ./.github/actions/resolve-version
+        with:
+          version: ${{ inputs.version }}
+
+      - name: Build
+        shell: cmd
+        run: call build.cmd
+        env:
+          ASEPRITE_VERSION: ${{ steps.resolve.outputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aseprite-${{ steps.resolve.outputs.version }}-windows-x64
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
