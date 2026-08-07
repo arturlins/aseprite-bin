@@ -10,17 +10,24 @@ pass=0
 fail=0
 
 # Creates a fake `curl` in $1 that mimics the GitHub API.
-#   $2 = tag_name returned by /releases/latest ("" makes the call fail)
+#   $2 = tag_name returned by /releases/latest ("" makes the call fail,
+#        "__MALFORMED__" returns a 200 body with no tag_name field at all)
 #   $3 = space-separated list of tags that exist in /git/ref/tags/
 make_stub_curl() {
   mkdir -p "$1"
+  local latest_body
+  if [ "$2" = "__MALFORMED__" ]; then
+    latest_body='{"name": "no tag_name field here"}'
+  else
+    latest_body="{\"tag_name\": \"$2\", \"prerelease\": false}"
+  fi
   cat > "$1/curl" <<STUB
 #!/usr/bin/env bash
 url="\${!#}"
 case "\$url" in
   */releases/latest)
     if [ -z "$2" ]; then exit 22; fi
-    printf '{"tag_name": "%s", "prerelease": false}\n' "$2"
+    printf '%s\n' '$latest_body'
     ;;
   */git/ref/tags/*)
     tag="\${url##*/}"
@@ -40,7 +47,33 @@ STUB
   chmod +x "$1/curl"
 }
 
+# Creates a fake `curl` in $1 where any call to */git/ref/tags/* succeeds
+# unconditionally, regardless of what tag is in the URL. Used to isolate the
+# version-format validation step from tag-existence checking: with this
+# stub, the only thing that can stop a malicious value from reaching stdout
+# is the regex validation itself, not an incidental rejection downstream.
+make_stub_curl_permissive_tags() {
+  mkdir -p "$1"
+  cat > "$1/curl" <<'STUB'
+#!/usr/bin/env bash
+url="${!#}"
+case "$url" in
+  */git/ref/tags/*)
+    tag="${url##*/}"
+    printf '{"ref": "refs/tags/%s"}\n' "$tag"
+    ;;
+  *)
+    exit 22
+    ;;
+esac
+STUB
+  chmod +x "$1/curl"
+}
+
 # run_case <name> <expected_status> <expected_stdout> <latest> <existing_tags> [args...]
+# Captures stderr into the global $last_stderr so callers that need to make
+# additional assertions about it (see run_case_stderr below) can, without
+# every existing call site having to care.
 run_case() {
   local name="$1" want_status="$2" want_out="$3" latest="$4" existing="$5"
   shift 5
@@ -50,8 +83,9 @@ run_case() {
   make_stub_curl "$tmp/bin" "$latest" "$existing"
 
   local out status
-  out="$(PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$@" 2>/dev/null)"
+  out="$(PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$@" 2>"$tmp/stderr")"
   status=$?
+  last_stderr="$(cat "$tmp/stderr")"
   rm -rf "$tmp"
 
   if [ "$status" = "$want_status" ] && [ "$out" = "$want_out" ]; then
@@ -61,6 +95,32 @@ run_case() {
     fail=$((fail + 1))
     printf 'FAIL - %s\n       want status=%s stdout=%q\n       got  status=%s stdout=%q\n' \
       "$name" "$want_status" "$want_out" "$status" "$out"
+  fi
+}
+
+# run_case_stderr <name> <expected_status> <expected_stdout> <want_stderr:yes|no> <latest> <existing_tags> [args...]
+# Like run_case, but also asserts whether stderr is empty ("no") or
+# non-empty ("yes"). Exists because a status code alone can't prove an error
+# message was actually written -- a script that dies silently and one that
+# reports its failure can produce the identical exit code.
+run_case_stderr() {
+  local name="$1" want_status="$2" want_out="$3" want_stderr="$4" latest="$5" existing="$6"
+  shift 6
+
+  run_case "$name" "$want_status" "$want_out" "$latest" "$existing" "$@"
+  # run_case already recorded pass/fail for status+stdout and printed its
+  # line; this adds a second, independent assertion on top for stderr.
+  local stderr_ok=1
+  if [ "$want_stderr" = "yes" ] && [ -z "$last_stderr" ]; then stderr_ok=0; fi
+  if [ "$want_stderr" = "no" ] && [ -n "$last_stderr" ]; then stderr_ok=0; fi
+
+  if [ "$stderr_ok" = "1" ]; then
+    pass=$((pass + 1))
+    printf 'ok   - %s (stderr)\n' "$name"
+  else
+    fail=$((fail + 1))
+    printf 'FAIL - %s (stderr)\n       want stderr=%s\n       got  stderr=%q\n' \
+      "$name" "$want_stderr" "$last_stderr"
   fi
 }
 
@@ -89,6 +149,30 @@ run_case "argumento nao-versao e rejeitado" \
 
 run_case "falha da api sem argumento e reportada" \
   1 "" "" "$ALL_TAGS"
+
+run_case_stderr "api sem tag_name reporta erro em stderr" \
+  1 "" "yes" "__MALFORMED__" "$ALL_TAGS"
+
+# Custom case (not run_case): the malicious value needs an embedded literal
+# newline, and the tag-existence stub must accept anything so that only the
+# format-validation regex stands between the value and stdout -- proving
+# Finding 2 (line-by-line `grep` vs. whole-string `[[ =~ ]]`) rather than
+# relying on some incidental downstream rejection.
+name="versao multi-linha e rejeitada mesmo com tag valida na primeira linha"
+tmp="$(mktemp -d)"
+make_stub_curl_permissive_tags "$tmp/bin"
+malicious="$(printf 'v1.3.18.1\nmalicious-payload-line')"
+out="$(PATH="$tmp/bin:$PATH" bash "$SCRIPT" "$malicious" 2>/dev/null)"
+status=$?
+rm -rf "$tmp"
+if [ "$status" = "1" ] && [ "$out" = "" ]; then
+  pass=$((pass + 1))
+  printf 'ok   - %s\n' "$name"
+else
+  fail=$((fail + 1))
+  printf 'FAIL - %s\n       want status=1 stdout=""\n       got  status=%s stdout=%q\n' \
+    "$name" "$status" "$out"
+fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -36,9 +36,14 @@ if [ -z "$version" ]; then
     echo "error: could not query the latest release of $REPO" >&2
     exit 1
   fi
+  # `|| true` prevents `pipefail` + `set -e` from killing the script right
+  # here if `grep` finds no match (e.g. a 200 response with an unexpected
+  # body shape) -- the emptiness check right below must stay reachable so
+  # the error is reported on stderr instead of the script dying silently.
   version="$(printf '%s' "$json" \
     | grep -m1 '"tag_name"' \
-    | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+    | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
+    || true)"
   if [ -z "$version" ]; then
     echo "error: no tag_name in the latest release of $REPO" >&2
     exit 1
@@ -51,7 +56,11 @@ case "$version" in
 esac
 
 # Validate BEFORE the tag is ever interpolated into a URL or a git command.
-if ! printf '%s' "$version" | grep -Eq "$VERSION_RE"; then
+# `[[ =~ ]]` matches the whole string ($VERSION_RE left unquoted so it is
+# treated as a regex, not a literal) -- unlike `grep`, which matches
+# line-by-line, so a multi-line value can't sneak a valid-looking first line
+# past this check and reach the URL interpolation below.
+if ! [[ "$version" =~ $VERSION_RE ]]; then
   echo "error: invalid version '$version' (expected e.g. v1.3.18.1 or v1.3.18-beta1)" >&2
   exit 1
 fi
