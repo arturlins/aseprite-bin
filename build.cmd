@@ -80,7 +80,7 @@ if not exist skia-%SKIA_VERSION% (
   mkdir skia-%SKIA_VERSION%
   pushd skia-%SKIA_VERSION%
   curl -sfLO https://github.com/aseprite/skia/releases/download/%SKIA_VERSION%/Skia-Windows-Release-x64.zip || echo failed to download skia && exit /b 1
-  %SZIP% x -y Skia-Windows-Release-x64.zip
+  %SZIP% x -y Skia-Windows-Release-x64.zip || echo failed to extract skia && exit /b 1
   popd
 )
 
@@ -113,8 +113,8 @@ rem *** package ***
 
 if exist dist rd /s /q dist
 set OUTDIR=dist\aseprite-%ASEPRITE_VERSION%-windows-x64
-mkdir %OUTDIR%
-echo # This file is here so Aseprite behaves as a portable program >%OUTDIR%\aseprite.ini
+mkdir %OUTDIR% || echo failed to create output directory && exit /b 1
+echo # This file is here so Aseprite behaves as a portable program >%OUTDIR%\aseprite.ini || echo failed to write aseprite.ini && exit /b 1
 copy /Y build\bin\aseprite.exe %OUTDIR%\ 1>nul || echo failed to copy binary && exit /b 1
 xcopy /E /Q /Y build\bin\data %OUTDIR%\data\ || echo failed to copy data && exit /b 1
 xcopy /E /Q /Y aseprite\docs %OUTDIR%\docs\ || echo failed to copy docs && exit /b 1
