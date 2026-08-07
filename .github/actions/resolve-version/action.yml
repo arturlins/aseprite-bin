@@ -1,0 +1,32 @@
+name: Resolve Aseprite version
+description: >-
+  Resolves and validates which Aseprite tag to build. With no input, resolves
+  the latest published release (drafts and prereleases excluded by the API).
+
+inputs:
+  version:
+    description: "Aseprite tag to build (e.g. v1.3.18.1). Empty means latest release."
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: "The resolved Aseprite tag, always prefixed with 'v'."
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        REQUESTED_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # Invoked through `bash` on purpose: a Windows checkout does not
+        # necessarily preserve the executable bit.
+        version="$(bash "${GITHUB_ACTION_PATH}/../../../scripts/resolve-version.sh" "${REQUESTED_VERSION}")"
+        echo "Resolved Aseprite version: ${version}"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "### Building Aseprite \`${version}\`" >> "$GITHUB_STEP_SUMMARY"
