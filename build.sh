@@ -132,10 +132,16 @@ if [ "$OS" = linux ]; then
     -DCMAKE_CXX_FLAGS:STRING=-stdlib=libstdc++ \
     -DCMAKE_EXE_LINKER_FLAGS:STRING=-stdlib=libstdc++
 else
+  # Hoisted into its own assignment (rather than inline in the cmake
+  # invocation below) so that a failing "xcrun" is caught by "set -e": a
+  # failing command substitution only aborts the script when it is the
+  # whole content of a simple command/assignment, not when it sits inside
+  # an argument to another command.
+  SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
   cmake "${common_args[@]}" \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
-    "-DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)" \
+    "-DCMAKE_OSX_SYSROOT=$SDK_PATH" \
     -DPNG_ARM_NEON:STRING=on
 fi
 
