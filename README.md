@@ -62,7 +62,7 @@ O campo `version` é opcional:
 
 ### 4. Aguarde a conclusão e abra a execução
 
-O tempo de build varia por plataforma: cerca de 24 minutos no Windows, 13 no
+O tempo de build varia por plataforma: cerca de 20 minutos no Windows, 13 no
 Linux e 10 no macOS.
 
 ![step4](images/step4.png)
