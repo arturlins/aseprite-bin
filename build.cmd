@@ -1,6 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
 
+rem *** Aseprite build script for Windows x64.
+rem *** ASEPRITE_VERSION must be set (e.g. v1.3.18.1).
+rem *** Run "bash scripts/resolve-version.sh" to resolve the latest release.
+
+if "%ASEPRITE_VERSION%" equ "" (
+  echo ERROR: ASEPRITE_VERSION is not set, e.g. set ASEPRITE_VERSION=v1.3.18.1
+  echo Run "bash scripts/resolve-version.sh" to resolve the latest release.
+  exit /b 1
+)
+
 set PATH="C:\Program Files\7-Zip";%PATH%
 
 where /q git.exe || (
@@ -27,12 +37,12 @@ where /Q cl.exe || (
   if "!VS!" equ "" (
     echo ERROR: Visual Studio installation not found
     exit /b 1
-  )  
+  )
   call "!VS!\VC\Auxiliary\Build\vcvarsall.bat" amd64 || exit /b 1
 )
 
 
-rem *** ninja
+rem *** ninja ***
 
 where /q ninja.exe || (
   curl -LOsf https://github.com/ninja-build/ninja/releases/download/v1.13.1/ninja-win.zip || exit /b 1
@@ -41,38 +51,18 @@ where /q ninja.exe || (
 )
 
 
-rem *** clone aseprite repo
+rem *** shallow clone of the requested tag ***
 
-if not exist aseprite (
-  call git clone --recursive --tags https://github.com/aseprite/aseprite.git aseprite || echo "failed to clone repo" && exit /b 1
-) else (
-  call git -C aseprite fetch --tags || echo "failed to fetch repo" && exit /b 1
-)
+echo Building Aseprite %ASEPRITE_VERSION%
 
+if exist aseprite rd /s /q aseprite
+call git clone --quiet --depth 1 --branch %ASEPRITE_VERSION% --recurse-submodules --shallow-submodules https://github.com/aseprite/aseprite.git aseprite || echo failed to clone %ASEPRITE_VERSION% && exit /b 1
 
-rem *** get name of newest tag
-
-if "%ASEPRITE_VERSION%" equ "" (
-  for /F "delims=" %%v in ('"git -C aseprite tag --sort=creatordate"') do (
-    set ASEPRITE_VERSION=%%v
-  )
-)
-
-echo building %ASEPRITE_VERSION%
+set ASEPRITE_VERSION_NUMBER=%ASEPRITE_VERSION:~1%
+powershell -NoProfile -Command "$p='aseprite/src/ver/CMakeLists.txt'; (Get-Content $p -Raw).Replace('1.x-dev','%ASEPRITE_VERSION_NUMBER%') | Set-Content $p -NoNewline" || echo failed to stamp version && exit /b 1
 
 
-rem **** update local aseprite repo to selected tag
-
-call git -C aseprite clean --quiet -fdx
-call git -C aseprite submodule foreach --recursive git clean -xfd
-call git -C aseprite fetch --quiet --depth=1 --no-tags origin %ASEPRITE_VERSION%:refs/remotes/origin/%ASEPRITE_VERSION% || echo "failed to fetch repo"        && exit /b 1
-call git -C aseprite reset --quiet --hard origin/%ASEPRITE_VERSION%                                                     || echo "failed to update repo"       && exit /b 1
-call git -C aseprite submodule update --init --recursive                                                                || echo "failed to update submodules" && exit /b 1
-
-python -c "v = open('aseprite/src/ver/CMakeLists.txt').read(); open('aseprite/src/ver/CMakeLists.txt', 'w').write(v.replace('1.x-dev', '%ASEPRITE_VERSION%'[1:]))"
-
-
-rem *** download skia
+rem *** download skia ***
 
 if exist aseprite\laf\misc\skia-tag.txt (
   set /p SKIA_VERSION=<aseprite\laf\misc\skia-tag.txt
@@ -84,6 +74,8 @@ if exist aseprite\laf\misc\skia-tag.txt (
   )
 )
 
+echo Using Skia %SKIA_VERSION%
+
 if not exist skia-%SKIA_VERSION% (
   mkdir skia-%SKIA_VERSION%
   pushd skia-%SKIA_VERSION%
@@ -93,7 +85,7 @@ if not exist skia-%SKIA_VERSION% (
 )
 
 
-rem *** build aseprite
+rem *** build aseprite ***
 
 if exist build rd /s /q build
 
@@ -117,16 +109,14 @@ cmake.exe                                                     ^
 ninja.exe -C build || echo build failed && exit /b 1
 
 
-rem *** create output folder
+rem *** package ***
 
-mkdir aseprite-%ASEPRITE_VERSION%
-echo # This file is here so Aseprite behaves as a portable program >aseprite-%ASEPRITE_VERSION%\aseprite.ini
-xcopy /E /Q /Y aseprite\docs aseprite-%ASEPRITE_VERSION%\docs\
-xcopy /E /Q /Y build\bin\aseprite.exe aseprite-%ASEPRITE_VERSION%\
-xcopy /E /Q /Y build\bin\data aseprite-%ASEPRITE_VERSION%\data\
+if exist dist rd /s /q dist
+set OUTDIR=dist\aseprite-%ASEPRITE_VERSION%-windows-x64
+mkdir %OUTDIR%
+echo # This file is here so Aseprite behaves as a portable program >%OUTDIR%\aseprite.ini
+copy /Y build\bin\aseprite.exe %OUTDIR%\ 1>nul || echo failed to copy binary && exit /b 1
+xcopy /E /Q /Y build\bin\data %OUTDIR%\data\ || echo failed to copy data && exit /b 1
+xcopy /E /Q /Y aseprite\docs %OUTDIR%\docs\ || echo failed to copy docs && exit /b 1
 
-if "%GITHUB_WORKFLOW%" neq "" (
-  mkdir github
-  move aseprite-%ASEPRITE_VERSION% github\
-  echo ASEPRITE_VERSION=%ASEPRITE_VERSION%>>"%GITHUB_OUTPUT%"
-)
+echo Done: %OUTDIR%
