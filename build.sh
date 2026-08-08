@@ -5,8 +5,9 @@
 # ASEPRITE_VERSION must be set (e.g. v1.3.18.1). Run
 # "bash scripts/resolve-version.sh" to resolve the latest release.
 #
-# Produces a .tar.gz inside dist/ — a tarball rather than a plain directory
-# because actions/upload-artifact drops the executable bit and symlinks.
+# Produces, inside dist/: a .tar.gz on Linux (a tarball rather than a plain
+# directory because actions/upload-artifact drops the executable bit and
+# symlinks) and a .dmg on macOS.
 #
 set -euo pipefail
 
@@ -178,16 +179,33 @@ fi
 ninja -C build aseprite
 
 
+# --- app icon (macOS) ------------------------------------------------------
+#
+# Upstream's Info.plist declares CFBundleIconFile = Aseprite.icns but the
+# Aseprite repository does not version that file, so a bundle built from
+# source has no icon. Belongs here rather than in packaging: the icon is part
+# of the app, not of how the app is shipped.
+
+if [ "$OS" = macos ]; then
+  ICNS="build/bin/Aseprite.app/Contents/Resources/Aseprite.icns"
+  if [ -f "$ICNS" ]; then
+    echo "Bundle already ships an icon, keeping upstream's"
+  else
+    ./scripts/make-icns.sh aseprite "$ICNS"
+  fi
+fi
+
+
 # --- package ---------------------------------------------------------------
 
 rm -rf dist
 mkdir -p dist
 
-TARBALL="dist/aseprite-$VERSION-$OS-$ARCH.tar.gz"
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
-
 if [ "$OS" = linux ]; then
+  TARBALL="dist/aseprite-$VERSION-$OS-$ARCH.tar.gz"
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+
   STAGE_DIR="$STAGE/aseprite-$VERSION-$OS-$ARCH"
   mkdir -p "$STAGE_DIR"
   cp build/bin/aseprite "$STAGE_DIR/"
@@ -195,18 +213,22 @@ if [ "$OS" = linux ]; then
   cp -R build/bin/data "$STAGE_DIR/data"
   cp -R aseprite/docs "$STAGE_DIR/docs"
   echo '# This file is here so Aseprite behaves as a portable program' > "$STAGE_DIR/aseprite.ini"
+
+  # A tarball rather than a plain directory because actions/upload-artifact
+  # drops the executable bit and symlinks.
+  tar -czf "$TARBALL" -C "$STAGE" "aseprite-$VERSION-$OS-$ARCH"
+
+  echo "Done: $TARBALL"
 else
-  STAGE_DIR="$STAGE/aseprite-$VERSION-$OS-$ARCH"
-  mkdir -p "$STAGE_DIR"
-  # ditto preserves the bundle structure, symlinks and permissions.
-  ditto build/bin/Aseprite.app "$STAGE_DIR/Aseprite.app"
-  cp -R aseprite/docs "$STAGE_DIR/docs"
-  # No aseprite.ini here on purpose: macOS .app bundles keep preferences
-  # under ~/Library, not next to the executable, so an ini inside
-  # Contents/MacOS would have no effect (unlike the Linux/Windows portable
-  # mode below).
+  # A .dmg rather than a tarball: the artifact already arrives wrapped in a
+  # zip, and asking a user to then unpack a tar.gz and move a bundle by hand
+  # was the whole problem. Dragging onto the Applications alias is the
+  # install step every Mac user already knows.
+  #
+  # aseprite/docs is dropped on purpose -- it is the manual, which is
+  # available online, and it has no place inside an installer volume.
+  DMG="dist/aseprite-$VERSION-$OS-$ARCH.dmg"
+  ./scripts/make-dmg.sh build/bin/Aseprite.app "$VERSION" "$DMG"
+
+  echo "Done: $DMG"
 fi
-
-tar -czf "$TARBALL" -C "$STAGE" "aseprite-$VERSION-$OS-$ARCH"
-
-echo "Done: $TARBALL"
