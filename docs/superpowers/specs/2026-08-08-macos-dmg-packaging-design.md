@@ -55,7 +55,7 @@ Settings → Privacy & Security → "Open Anyway".
 Consequência de design: o DMG melhora a **ergonomia de instalação**, não o
 bloqueio de segurança. Se o objetivo é o usuário conseguir instalar, tratar
 apenas o empacotamento resolve metade. O passo da quarentena precisa ser
-impossível de errar — por isso o `LEIA-ME.txt` dentro do DMG faz parte do
+impossível de errar — por isso o `READ ME FIRST.txt` dentro do DMG faz parte do
 escopo, não é enfeite.
 
 O conserto real seria uma conta Apple Developer (US$ 99/ano) com Developer ID e
@@ -118,7 +118,8 @@ app é legítimo; desenhar arte de instalador não é.
 | Decisão | Escolha |
 |---|---|
 | Ferramenta de DMG | `dmgbuild` |
-| Conteúdo do DMG | `Aseprite.app` + alias `Applications` + `LEIA-ME.txt` |
+| Conteúdo do DMG | `Aseprite.app` + alias `Applications` + `READ ME FIRST.txt` |
+| Idioma do README e do DMG | Inglês, público leigo. README reescrito por inteiro |
 | Pasta `docs/` | Descartada (é o manual, disponível online) |
 | `.tar.gz` do macOS | Removido — o DMG o substitui |
 | Falha ao gerar o DMG | Falha o build. Sem fallback silencioso para tarball |
@@ -196,22 +197,59 @@ versão do ambiente:
 - `window_rect`: `((100, 100), (640, 400))`
 - `icon_size`: 128
 - posições: `Aseprite.app` em (160, 170), `Applications` em (480, 170),
-  `LEIA-ME.txt` em (320, 310)
+  `READ ME FIRST.txt` em (320, 310)
 - `icon`: ícone de volume, lido de `<app-path>/Contents/Resources/Aseprite.icns`
   — o `make-dmg.sh` recebe só o `.app` e tira o ícone de dentro dele, sem
   precisar de um argumento a mais nem saber como o ícone foi produzido
 - `background`: nenhum
 
-### `LEIA-ME.txt`
+### `READ ME FIRST.txt`
 
 Gerado pelo `make-dmg.sh` em diretório temporário (não versionado), com a versão
-interpolada. Conteúdo:
+interpolada. **Em inglês**, pelo mesmo motivo do README. Conteúdo:
 
 1. Arraste `Aseprite.app` para `Applications`
 2. Rode `xattr -dr com.apple.quarantine /Applications/Aseprite.app`
 3. Uma linha explicando o porquê: o binário não é notarizado, o que exigiria uma
    conta Apple Developer paga
 4. Alternativa sem terminal: System Settings → Privacy & Security → "Open Anyway"
+
+Escrito para leigo: sem jargão não explicado, cada passo com o resultado
+esperado. Se o usuário só ler este arquivo e nada mais, tem que conseguir
+instalar.
+
+## README — reescrita completa em inglês
+
+O README hoje é em português e assume familiaridade com CI, tarballs e terminal.
+O público real é majoritariamente leigo e internacional. **Ele é reescrito por
+inteiro, em inglês**, não apenas na seção do macOS.
+
+Idioma único: inglês. Nada de README bilíngue — duplica manutenção e as duas
+versões divergem na primeira correção.
+
+Requisitos de conteúdo:
+
+- **Escrito para quem nunca usou GitHub Actions.** Nenhum termo de CI, build ou
+  terminal aparece sem uma explicação de uma linha na primeira ocorrência. As
+  capturas de tela existentes em `images/` são mantidas e continuam ancorando os
+  passos 1 a 5.
+- **Instalação macOS passo a passo, com o resultado esperado a cada passo.** O
+  usuário baixa um `.zip`, dentro dele há um `.dmg`, ele abre o `.dmg`, aparece
+  uma janela com o ícone do Aseprite e uma pasta Applications, ele arrasta um
+  sobre o outro. Sem pular etapas por parecerem óbvias.
+- **A quarentena explicada, não só o comando.** Dizer *por que* o macOS bloqueia
+  (o app não é notarizado pela Apple, o que exigiria uma conta paga de
+  desenvolvedor), o que o comando faz, e onde fica a alternativa por System
+  Settings para quem não abre o Terminal. Copiar um comando sem entender é
+  exatamente o que trava usuário leigo.
+- **A licença em destaque.** O aviso de que é preciso ter licença do Aseprite e
+  de que os binários não podem ser redistribuídos continua no topo, sem
+  suavizar.
+- **Windows e Linux traduzidos, com o mesmo nível de detalhe.** Conteúdo
+  inalterado em substância — só idioma e granularidade.
+- **Tabela de workflows atualizada:** a saída do macOS passa a ser `.dmg`.
+- **Sem promessa não verificada.** Nada sobre o ícone do arquivo `.dmg`
+  desmontado enquanto isso não for confirmado num Mac real.
 
 ## Fluxo de dados
 
@@ -224,7 +262,7 @@ build.sh (Darwin)
        (pulado se o arquivo já existir)
   └─ scripts/make-dmg.sh build/bin/Aseprite.app <versao> dist/<nome>.dmg
        ├─ venv + dmgbuild (pinado por hash)
-       ├─ gera LEIA-ME.txt
+       ├─ gera READ ME FIRST.txt
        ├─ dmgbuild -s dmg-settings.py
        └─ verificação pós-geração
             → dist/aseprite-<versao>-macos-arm64.dmg
@@ -242,7 +280,7 @@ Todo script roda sob `set -euo pipefail`, consistente com `build.sh`.
 - `Aseprite.app` existe na raiz do volume
 - `Applications` é symlink para `/Applications`
 - `Aseprite.app/Contents/Resources/Aseprite.icns` existe
-- `LEIA-ME.txt` existe
+- `READ ME FIRST.txt` existe
 
 Depois desmonta (com `trap` garantindo o detach mesmo em falha) e sai diferente
 de zero em qualquer asserção quebrada.
@@ -262,7 +300,7 @@ ela roda em todo build — não é um passo opcional de QA.
 | `scripts/dmg-requirements.txt` | **Criar.** Pins com hash de `dmgbuild`, `ds-store`, `mac-alias`. |
 | `build.sh` | **Modificar.** Branch macOS chama os dois scripts e deixa de gerar tarball. Branch Linux intocado. |
 | `.github/workflows/build-macos.yml` | **Modificar.** `path: dist/*.dmg`. |
-| `README.md` | **Modificar.** Linha da tabela e seção "macOS". |
+| `README.md` | **Reescrever por completo, em inglês**, para público leigo. |
 | `.gitignore` | **Verificar.** `build/` já é ignorado, cobrindo `build/.dmg-venv`. |
 
 ## Fora de escopo
