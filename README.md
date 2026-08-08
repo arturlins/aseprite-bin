@@ -1,174 +1,227 @@
 # aseprite-bin
 
-Ambiente de build automatizado do [Aseprite][] via GitHub Actions, para
-Windows x64, Linux x64 e macOS arm64.
+Compile [Aseprite][] for yourself using GitHub Actions, for Windows, Linux, or
+macOS. No development tools to install and nothing to configure — you click a
+button on a web page, wait, and download the result.
 
 > [!IMPORTANT]
-> **Você precisa de uma licença do Aseprite.** O [EULA][] permite compilar
-> a partir do código-fonte para uso próprio, mas **proíbe a redistribuição
-> dos binários gerados**. Os workflows deste repositório são exclusivamente
-> manuais e nunca publicam Releases. Os artifacts expiram em 7 dias.
+> **You need an Aseprite license.** The [EULA][] lets you compile Aseprite from
+> source for your own use, but **forbids redistributing the binaries you
+> produce**. The workflows here are manual-only and never publish a Release.
+> Build artifacts expire after 7 days.
 >
-> Se este repositório for público, qualquer pessoa autenticada no GitHub
-> consegue baixar os artifacts das suas execuções. Se isso te incomoda,
-> use **Import repository** em vez de **Fork** e crie uma cópia privada —
-> forks de repositórios públicos não podem ser tornados privados.
+> If this repository is public, anyone signed in to GitHub can download the
+> artifacts from your runs. If that bothers you, use **Import repository**
+> instead of **Fork** and make your copy private — a fork of a public
+> repository cannot be made private.
 
-Para comprar uma licença, visite a [página de download][download page].
+To buy a license, visit the [Aseprite download page][download page].
 
-## Workflows disponíveis
+## What you get
 
-| Workflow | Runner | Saída |
+A *workflow* is an automated job that GitHub runs for you on its own computers.
+This repository has one per operating system, so you run only the one you need,
+and a failure on one platform never affects the others.
+
+| Workflow | Runs on | You download |
 |---|---|---|
-| `Build (Windows)` | `windows-2025` | pasta com `aseprite.exe`, `data/`, `docs/` |
-| `Build (Linux)` | `ubuntu-22.04` | `.tar.gz` com o binário, `data/`, `docs/` |
-| `Build (macOS)` | `macos-15` (arm64) | `.tar.gz` com `Aseprite.app` |
+| `Build (Windows)` | `windows-2025` | a folder with `aseprite.exe`, `data/` and `docs/` |
+| `Build (Linux)` | `ubuntu-22.04` | a `.tar.gz` archive with the program, `data/` and `docs/` |
+| `Build (macOS)` | `macos-15` (Apple Silicon) | a `.dmg` disk image with `Aseprite.app` |
 
-Cada plataforma tem seu próprio workflow: você roda só o que precisa, e uma
-falha numa plataforma nunca afeta as outras.
+## How to build
 
-## Como gerar um build
+### 1. Make your own copy of this repository
 
-### 1. Crie sua própria cópia do repositório
-
-Clique em `Fork` no topo da página.
+Click `Fork` at the top of the page.
 
 ![step1a](images/step1a.png)
 ![step1b](images/step1b.png)
 
-> Para manter os binários fora do alcance de terceiros, use
-> **`+` → Import repository** e marque a cópia como **Private** em vez de
-> fazer um fork.
+> To keep your binaries out of reach of other people, use **`+` → Import
+> repository** and mark the copy as **Private**, instead of forking.
 
-### 2. Habilite as Actions
+### 2. Turn Actions on
 
-Abra a aba `Actions` e confirme a ativação.
+Open the `Actions` tab and confirm that you want to enable workflows. GitHub
+disables them by default on a new copy.
 
 ![step2](images/step2.png)
 
-### 3. Rode o workflow da sua plataforma
+### 3. Run the workflow for your platform
 
-Escolha `Build (Windows)`, `Build (Linux)` ou `Build (macOS)` na lista à
-esquerda e clique em `Run workflow`.
+Pick `Build (Windows)`, `Build (Linux)` or `Build (macOS)` from the list on the
+left, then click `Run workflow`.
 
-O campo `version` é opcional:
+The `version` field is optional:
 
-- **Vazio** — compila o **último release publicado** do Aseprite. Prereleases
-  e drafts são ignorados.
-- **Preenchido** — compila a versão indicada, por exemplo `v1.3.18.1` ou
-  `v1.3.18-beta1`. A lista completa está nas [tags do Aseprite][versions].
+- **Leave it empty** — builds the **latest published release** of Aseprite.
+  Prereleases and drafts are skipped.
+- **Fill it in** — builds the version you name, for example `v1.3.18.1` or
+  `v1.3.18-beta1`. The full list is on the [Aseprite tags page][versions].
 
 ![step3](images/step3.png)
 
-### 4. Aguarde a conclusão e abra a execução
+### 4. Wait, then open the run
 
-O tempo de build varia por plataforma: cerca de 20 minutos no Windows, 13 no
-Linux e 10 no macOS.
+Compiling takes a while: roughly 20 minutes on Windows, 13 on Linux, 10 on
+macOS. You can close the page and come back later.
 
 ![step4](images/step4.png)
 
-### 5. Baixe o artifact no fim da página
+### 5. Download the artifact at the bottom of the page
+
+An *artifact* is just the file the job produced. GitHub always wraps it in a
+`.zip`, whatever is inside.
 
 ![step5](images/step5.png)
 
-Para compilar uma versão nova depois, repita os passos 3 a 5.
+To build a newer version later, repeat steps 3 to 5.
 
-## Depois do download
+## After you download
+
+### macOS
+
+You downloaded a `.zip`. Inside it is a `.dmg` — a disk image, the usual way
+Mac apps are delivered.
+
+1. **Double-click the `.zip`.** A `.dmg` file appears next to it.
+
+2. **Double-click the `.dmg`.** A window opens showing the Aseprite icon on the
+   left and a folder called Applications on the right.
+
+3. **Drag the Aseprite icon onto the Applications folder.** That copies
+   Aseprite onto your Mac. When the copy finishes you can close the window and
+   eject the disk image.
+
+4. **Allow Aseprite to run.** Open the Terminal app — press Command+Space, type
+   `Terminal`, press Return — then paste this line and press Return:
+
+       xattr -dr com.apple.quarantine /Applications/Aseprite.app
+
+   It prints nothing when it works. That is normal.
+
+5. **Open Aseprite** from your Applications folder.
+
+Steps 4 and 5 are only needed once per build.
+
+#### Why is step 4 needed?
+
+macOS refuses to open apps that have not been *notarized* by Apple. Notarizing
+requires a paid Apple Developer account, which this project does not use — so
+macOS treats Aseprite as untrusted even though you compiled it yourself from
+the official source code. It is not a sign that anything is wrong with the
+build.
+
+The command in step 4 clears that flag for this one app.
+
+If you would rather not use the Terminal: try to open Aseprite and let macOS
+block it, then open System Settings, go to Privacy & Security, scroll to the
+bottom, and click **Open Anyway**.
+
+The same instructions are included as `READ ME FIRST.txt` inside the disk
+image.
+
+Only **Apple Silicon** (M1 and newer) is supported. Intel Macs are not built
+here.
 
 ### Windows
 
-O artifact é um `.zip` contendo a pasta `aseprite-v1.3.18.1-windows-x64`:
+The artifact is a `.zip` containing the folder
+`aseprite-v1.3.18.1-windows-x64`. Unzip it anywhere you like and run:
 
     aseprite-v1.3.18.1-windows-x64\aseprite.exe
 
-O `aseprite.ini` incluso faz o programa se comportar como portable, guardando
-as configurações na própria pasta.
+The included `aseprite.ini` makes the program portable, keeping its settings in
+that same folder instead of in your user profile. Move the folder and your
+settings come along.
 
 ### Linux
 
-O artifact é um `.zip` contendo um `.tar.gz` — a camada extra existe porque o
-GitHub Actions descarta a permissão de execução ao compactar diretórios.
+The artifact is a `.zip` containing a `.tar.gz`. The extra layer exists because
+GitHub strips the executable permission when it packs a directory, and the
+program would not start.
 
     unzip aseprite-v1.3.18.1-linux-x64.zip
     tar -xzf aseprite-v1.3.18.1-linux-x64.tar.gz
     cd aseprite-v1.3.18.1-linux-x64
     ./aseprite
 
-O binário é compilado no Ubuntu 22.04 (glibc 2.35) e roda em distribuições
-dessa geração ou mais novas.
+It is compiled on Ubuntu 22.04 (glibc 2.35) and runs on distributions of that
+generation or newer.
 
-### macOS
+## Building on your own machine
 
-Mesma estrutura de `.zip` contendo `.tar.gz`:
+The same scripts the automated builds use also run locally. First find the
+version you want and set it as an environment variable.
 
-    unzip aseprite-v1.3.18.1-macos-arm64.zip
-    tar -xzf aseprite-v1.3.18.1-macos-arm64.tar.gz
-    cd aseprite-v1.3.18.1-macos-arm64
-
-O binário **não é assinado nem notarizado** — assinar exigiria uma conta
-Apple Developer paga. O Gatekeeper vai bloquear a primeira execução. Remova a
-marca de quarentena:
-
-    xattr -dr com.apple.quarantine Aseprite.app
-    open Aseprite.app
-
-Só há build **arm64** (Apple Silicon). Macs Intel não são suportados por este
-repositório.
-
-## Build local
-
-Os mesmos scripts usados no CI funcionam na sua máquina. Descubra a versão a
-compilar e exporte-a:
-
-**Windows** (requer Visual Studio com "Desktop development with C++", Git,
-7-Zip e CMake):
+**Windows** — needs Visual Studio with "Desktop development with C++", Git,
+7-Zip and CMake:
 
     set ASEPRITE_VERSION=v1.3.18.1
     build.cmd
 
-Para descobrir a versão mais recente sem abrir o navegador, use o Git Bash que
-acompanha o Git for Windows:
+To look up the latest version without opening a browser, use the Git Bash that
+comes with Git for Windows:
 
     bash scripts/resolve-version.sh
 
-**Linux / macOS:**
+**Linux and macOS:**
 
     export ASEPRITE_VERSION="$(bash scripts/resolve-version.sh)"
     ./build.sh
 
-Os scripts sempre re-clonam o Aseprite na versão exata solicitada, então cada
-execução parte de uma árvore limpa. O download da Skia é reaproveitado entre
-execuções.
+Every run re-clones Aseprite at the exact version requested, so each build
+starts from a clean tree. The Skia download is reused between runs.
 
-As dependências de cada plataforma estão no [INSTALL.md][] oficial
-do Aseprite.
+Each platform's prerequisites are listed in Aseprite's official [INSTALL.md][].
 
-## Como a versão é resolvida
+## How the version is resolved
 
-`scripts/resolve-version.sh` é a única fonte de verdade:
+`scripts/resolve-version.sh` is the single source of truth:
 
-1. Sem argumento, consulta `GET /repos/aseprite/aseprite/releases/latest` — a
-   API já exclui drafts e prereleases.
-2. Normaliza a entrada, adicionando o prefixo `v` se faltar.
-3. Valida contra `^v[0-9]+(\.[0-9]+){1,3}(-beta[0-9]+)?$` **antes** de a string
-   chegar a qualquer URL ou comando `git`.
-4. Confirma que a tag existe no repositório oficial, falhando cedo e com
-   mensagem clara se não existir.
+1. With no argument, it queries `GET /repos/aseprite/aseprite/releases/latest`
+   — that endpoint already excludes drafts and prereleases.
+2. It normalizes the input, adding the `v` prefix if you left it out.
+3. It validates against `^v[0-9]+(\.[0-9]+){1,3}(-beta[0-9]+)?$` **before** the
+   string reaches any URL or `git` command.
+4. It confirms the tag exists in the official repository, failing early and
+   clearly if it does not.
 
-A suíte de testes roda sem dependências externas:
+The test suite runs with no external dependencies:
 
-    bash tests/resolve-version.test.sh
+    bash tests/run-all.sh
 
-## Aviso legal
+## macOS packaging notes
 
-Este repositório não distribui nem contém código ou binários do Aseprite. Ele
-apenas automatiza a compilação a partir do código-fonte oficial. O Aseprite é
-propriedade da Igara Studio S.A. e está sujeito ao seu [EULA][]. Compile
-somente se você possui uma licença válida e não redistribua os binários
-gerados.
+The macOS build does two things the Aseprite source tree does not do on its
+own.
+
+**It gives the app its icon.** Aseprite's `Info.plist` declares an
+`Aseprite.icns`, but that file is not in the open-source repository and its
+CMake does not generate one — so an app compiled straight from source has no
+icon at all. `scripts/make-icns.sh` builds it from the PNGs under
+`data/icons/`, which are in the repository, using `iconutil`.
+
+**It builds the disk image with [dmgbuild][], not `create-dmg`.**
+`create-dmg` lays out its window by running AppleScript against the Finder,
+which fails intermittently on the macOS runners used here. `dmgbuild` writes
+the window layout directly, with no Finder involved. Its version is pinned by
+hash in `scripts/dmg-requirements.txt`.
+
+The disk image is not signed or notarized, and there is no plan to change that
+— see step 4 above.
+
+## Legal
+
+This repository does not distribute or contain any Aseprite code or binaries.
+It only automates compiling from the official source. Aseprite is the property
+of Igara Studio S.A. and is subject to its [EULA][]. Compile only if you hold a
+valid license, and do not redistribute what you build.
 
 [Aseprite]: https://github.com/aseprite/aseprite
 [INSTALL.md]: https://github.com/aseprite/aseprite/blob/main/INSTALL.md
 [EULA]: https://github.com/aseprite/aseprite/blob/main/EULA.txt
 [versions]: https://github.com/aseprite/aseprite/tags
 [download page]: https://www.aseprite.org/download/
+[dmgbuild]: https://github.com/dmgbuild/dmgbuild
