@@ -25,7 +25,7 @@ and a failure on one platform never affects the others.
 
 | Workflow | Runs on | You download |
 |---|---|---|
-| `Build (Windows)` | `windows-2025` | a folder with `aseprite.exe`, `data/` and `docs/` |
+| `Build (Windows)` | `windows-2025` | a folder with `aseprite.exe`, `data/` and `docs/`, or an installer that sets it up for you |
 | `Build (Linux)` | `ubuntu-22.04` | a `.tar.gz` archive with the program, `data/` and `docs/` |
 | `Build (macOS)` | `macos-15` (Apple Silicon) | a `.dmg` disk image with `Aseprite.app` |
 
@@ -127,7 +127,11 @@ here.
 
 ### Windows
 
-The artifact is a `.zip` containing the folder
+The Windows workflow produces **two separate downloads**, so you only get the
+one you actually want: `aseprite-<version>-windows-x64` (portable) and
+`aseprite-<version>-windows-x64-setup` (installer).
+
+**Portable.** The artifact is a `.zip` containing the folder
 `aseprite-v1.3.18.1-windows-x64`. Unzip it anywhere you like and run:
 
     aseprite-v1.3.18.1-windows-x64\aseprite.exe
@@ -135,6 +139,22 @@ The artifact is a `.zip` containing the folder
 The included `aseprite.ini` makes the program portable, keeping its settings in
 that same folder instead of in your user profile. Move the folder and your
 settings come along.
+
+**Installer.** The artifact is a `.zip` containing a single `.exe`. Run it and
+you'll be asked:
+
+- **Install for all users** or **install for me only.** The first needs
+  administrator rights and installs to `C:\Program Files\Aseprite`; the second
+  needs no special rights and installs to your own user profile instead. Pick
+  the second if you're on a computer where you don't have administrator
+  access — for example, a work computer managed by an organization.
+- Whether to add a **desktop shortcut** (off by default — a Start Menu
+  shortcut is always created) and whether to **open `.aseprite`/`.ase` files
+  with Aseprite** by double-clicking them (on by default).
+
+The installed copy keeps its settings in your Windows user profile rather than
+next to the program, and adds an entry to Windows' "Add or remove programs" so
+you can uninstall it the normal way.
 
 ### Linux
 
@@ -156,7 +176,8 @@ The same scripts the automated builds use also run locally. First find the
 version you want and set it as an environment variable.
 
 **Windows** — needs Visual Studio with "Desktop development with C++", Git,
-7-Zip and CMake:
+7-Zip and CMake. [NSIS][] is optional — install it too if you also want
+`build.cmd` to produce the installer, not just the portable folder:
 
     set ASEPRITE_VERSION=v1.3.18.1
     build.cmd
@@ -225,3 +246,4 @@ valid license, and do not redistribute what you build.
 [versions]: https://github.com/aseprite/aseprite/tags
 [download page]: https://www.aseprite.org/download/
 [dmgbuild]: https://github.com/dmgbuild/dmgbuild
+[NSIS]: https://nsis.sourceforge.io/
