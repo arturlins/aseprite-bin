@@ -36,16 +36,27 @@ jobs:
         with:
           version: ${{ inputs.version }}
 
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
       - name: Build
         shell: cmd
         run: call build.cmd
         env:
           ASEPRITE_VERSION: ${{ steps.resolve.outputs.version }}
 
-      - name: Upload artifact
+      - name: Upload portable artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: aseprite-${{ steps.resolve.outputs.version }}-windows-x64
-          path: dist
+          path: dist/aseprite-*-windows-x64
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aseprite-${{ steps.resolve.outputs.version }}-windows-x64-setup
+          path: dist/*.exe
           if-no-files-found: error
           retention-days: 7
