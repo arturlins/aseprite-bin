@@ -266,11 +266,19 @@ Function un.onInit
     FileOpen $1 "$PROGRAMFILES64\aseprite-setup-write-test.tmp" w
     ${If} ${Errors}
       ; Not elevated -- relaunch this uninstaller elevated and quit this
-      ; instance. NSIS already handles copying itself out of $INSTDIR before
-      ; deleting that directory; this only adds the elevation step in front
-      ; of that existing behavior.
+      ; instance. Relaunch "$INSTDIR\uninstall.exe", not $EXEPATH: by the
+      ; time un.onInit runs, NSIS has already copied itself out to a %TEMP%
+      ; stub and re-exec'd with _?=$INSTDIR so it can delete its own
+      ; directory, so $EXEPATH here is that temp copy. Relaunching $EXEPATH
+      ; without forwarding that parameter would make the elevated child
+      ; treat the temp folder as $INSTDIR -- it would clean up shortcuts and
+      ; the registry (those don't depend on $INSTDIR) but never touch the
+      ; real Program Files\Aseprite, leaving it orphaned while still
+      ; reporting success. Going through "$INSTDIR\uninstall.exe" instead
+      ; re-triggers NSIS's own temp-copy dance correctly on the elevated
+      ; side.
       ClearErrors
-      ExecShell "runas" "$EXEPATH"
+      ExecShell "runas" "$INSTDIR\uninstall.exe"
       ${If} ${Errors}
         MessageBox MB_OK|MB_ICONEXCLAMATION \
           "Administrator rights are required to uninstall this copy of Aseprite.$\r$\n$\r$\nRestart the uninstaller and accept the elevation prompt."
