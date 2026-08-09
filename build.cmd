@@ -44,6 +44,17 @@ if exist "%ProgramFiles%\7-Zip\7z.exe" (
   set SZIP=7za.exe
 )
 
+if exist "%ProgramFiles(x86)%\NSIS\makensis.exe" (
+  set MAKENSIS="%ProgramFiles(x86)%\NSIS\makensis.exe"
+) else (
+  where /q makensis.exe || (
+    echo ERROR: NSIS "makensis.exe" not found
+    echo Install it from https://nsis.sourceforge.io/ or run "choco install nsis"
+    exit /b 1
+  )
+  set MAKENSIS=makensis.exe
+)
+
 
 rem *** Visual Studio environment ***
 
@@ -158,3 +169,11 @@ xcopy /E /Q /Y build\bin\data %OUTDIR%\data\ || echo failed to copy data && exit
 xcopy /E /Q /Y aseprite\docs %OUTDIR%\docs\ || echo failed to copy docs && exit /b 1
 
 echo Done: %OUTDIR%
+
+
+rem *** installer (NSIS) ***
+
+set SETUPFILE=dist\aseprite-%ASEPRITE_VERSION%-windows-x64-setup.exe
+%MAKENSIS% /DVERSION=%ASEPRITE_VERSION% /DVERSION_NUMBER=%ASEPRITE_VERSION_NUMBER% /DSRCDIR=%CD%\%OUTDIR% /DOUTFILE=%CD%\%SETUPFILE% scripts\installer.nsi || echo failed to build installer && exit /b 1
+
+echo Done: %SETUPFILE%
