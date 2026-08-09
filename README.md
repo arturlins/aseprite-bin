@@ -176,8 +176,8 @@ The same scripts the automated builds use also run locally. First find the
 version you want and set it as an environment variable.
 
 **Windows** — needs Visual Studio with "Desktop development with C++", Git,
-7-Zip and CMake. [NSIS][] is optional — install it too if you also want
-`build.cmd` to produce the installer, not just the portable folder:
+7-Zip, CMake, and [NSIS][]. All are required — `build.cmd` exits if any is
+missing:
 
     set ASEPRITE_VERSION=v1.3.18.1
     build.cmd
