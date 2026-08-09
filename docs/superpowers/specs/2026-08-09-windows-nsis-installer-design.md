@@ -63,13 +63,17 @@ Duas formas de implementar essa escolha com auto-elevação foram avaliadas:
   terceiro, baixado à parte e precisaria ser fixado por hash tanto no CI quanto
   localmente, como mais uma dependência externa pinada para manter.
 - **Feito à mão, sem plugin extra (escolhido)** — usa só o que já vem em
-  `choco install nsis`: o plugin `UserInfo` (embutido no NSIS padrão) para
-  detectar se o processo já está elevado, e a instrução nativa `ExecShell
-  "runas"` para relançar o próprio instalador elevado somente quando "todos os
-  usuários" for escolhido e o processo ainda não estiver elevado. Mais lógica
-  para manter no `.nsi` deste repositório, mas nenhuma dependência de terceiro
-  nova — mesma postura já adotada no macOS ao preferir `dmgbuild` a
-  `create-dmg` por causa da fragilidade de dependências externas em CI.
+  `choco install nsis`: uma checagem de elevação por write-probe (tenta
+  escrever um arquivo descartável em Program Files) em vez do plugin
+  `UserInfo`, já que `UserInfo::GetAccountType` reporta se a *conta* pertence
+  ao grupo Administradores, não se *este processo* está de fato elevado — uma
+  conta admin não elevada faria o `UserInfo` reportar "Admin" incorretamente.
+  A instrução nativa `ExecShell "runas"` relança o próprio instalador elevado
+  somente quando "todos os usuários" for escolhido e o processo ainda não
+  estiver elevado. Mais lógica para manter no `.nsi` deste repositório, mas
+  nenhuma dependência de terceiro nova — mesma postura já adotada no macOS ao
+  preferir `dmgbuild` a `create-dmg` por causa da fragilidade de dependências
+  externas em CI.
 
 ### Ícone: possivelmente já embutido no `.exe`
 
@@ -93,7 +97,7 @@ gerando um `.ico` a partir de `data/icons/*.png` (mesma fonte já usada lá).
 | Artifacts no Actions | Dois, separados: `aseprite-<versao>-windows-x64` (portátil, como hoje) e `aseprite-<versao>-windows-x64-setup` (instalador) |
 | Escopo de instalação | Escolha em tempo de execução: todos os usuários (Program Files, `HKLM`) vs. só o usuário atual (`%LocalAppData%\Programs`, `HKCU`) |
 | Opção pré-selecionada | "Todos os usuários" |
-| Mecanismo de auto-elevação | `UserInfo` (embutido) + `ExecShell "runas"` — sem plugin `UAC.dll` de terceiro |
+| Mecanismo de auto-elevação | Write-probe em Program Files (mais confiável que `UserInfo`) + `ExecShell "runas"` — sem plugin `UAC.dll` de terceiro |
 | `RequestExecutionLevel` | `user` — nunca pede UAC só por abrir o instalador |
 | Pasta de instalação | Sem número de versão: `Aseprite`, não `aseprite-<versao>-windows-x64` |
 | Upgrade / reinstalação | Apaga `$INSTDIR\data` antes de copiar os arquivos novos, evitando arquivos órfãos de versões antigas |
@@ -102,7 +106,7 @@ gerando um `.ico` a partir de `data/icons/*.png` (mesma fonte já usada lá).
 | Atalho de Desktop | Checkbox opcional, **desmarcado** por padrão |
 | Associação `.aseprite` / `.ase` | Checkbox opcional, **marcado** por padrão |
 | Add/Remove Programs | Entrada registrada (nome, versão, ícone, publisher, tamanho, string de desinstalação) |
-| Desinstalador | Detecta o próprio escopo pelo caminho de onde está rodando (`$INSTDIR` sob Program Files vs. LocalAppData) — sem precisar de marcador extra |
+| Desinstalador | Detecta o próprio escopo lendo de volta o valor `InstallScope` gravado no registro pelo instalador — mais robusto que inferir pelo caminho, já que o usuário pode ter redirecionado `$INSTDIR` na tela de diretório |
 | Ícone | Reaproveita o do `.exe` se já existir; gera um `.ico` só se necessário (a confirmar na implementação) |
 | Assinatura do instalador | Fora de escopo, mesma postura já adotada para o `.dmg` do macOS (sem notarização) |
 | Linux e macOS | Intocados |
@@ -143,9 +147,9 @@ Fluxo do instalador:
    `<hive>\Software\Classes`, com `DefaultIcon` e `shell\open\command`
    apontando para `$INSTDIR\aseprite.exe`; chama `SHChangeNotify` para o
    Explorer atualizar sem precisar de logoff.
-7. **Desinstalador**: lê o próprio caminho para inferir escopo (Program Files
-   vs. LocalAppData), remove `$INSTDIR`, atalhos, chave de Uninstall e chaves
-   de associação de arquivo.
+7. **Desinstalador**: lê o valor `InstallScope` gravado no registro para saber
+   o escopo (Program Files/`HKLM` vs. LocalAppData/`HKCU`), remove `$INSTDIR`,
+   atalhos, chave de Uninstall e chaves de associação de arquivo.
 
 ### `build.cmd`
 
@@ -198,10 +202,12 @@ build-windows.yml
   em vez de tentar (e falhar silenciosamente) escrever em Program Files sem
   permissão.
 - Teste de fumaça `tests/make-installer.test.sh`, no espírito de
-  `make-dmg.test.sh`: monta uma pasta fixture mínima (exe e dados fake) e roda
-  `makensis` contra `scripts/installer.nsi` com uma versão de teste,
-  verificando que o `.exe` de saída é gerado sem erro. Isso cobre erros de
-  sintaxe/referência no script, não o comportamento em tempo de instalação.
+  `make-dmg.test.sh`: asserções estáticas via `grep` sobre `scripts/installer.nsi`
+  e `build.cmd` (defines exigidas, seções esperadas, caminhos de escopo,
+  etc.), sem invocar `makensis` — mantém a suíte sem dependências externas,
+  já que `makensis` é uma ferramenta Windows-only que não se assume instalada.
+  Isso cobre presença/ausência de trechos estruturais no script, não erros de
+  sintaxe/referência do NSIS nem o comportamento em tempo de instalação.
 - O comportamento de instalação em si (registro, atalhos, elevação,
   desinstalação limpa) não é testável por script de forma realista — ao
   contrário do macOS, esta máquina roda Windows de verdade, então o plano é
@@ -217,7 +223,7 @@ build-windows.yml
 | `scripts/make-ico.ps1` (ou similar) | **Criar, se necessário** — só se a checagem de ícone embutido no `.exe` (achado acima) confirmar que falta gerar um `.ico`. |
 | `build.cmd` | **Modificar.** Guard de `makensis.exe` + bloco de empacotamento do instalador. |
 | `.github/workflows/build-windows.yml` | **Modificar.** Step `choco install nsis -y` + segundo `upload-artifact`. |
-| `tests/make-installer.test.sh` | **Criar.** Teste de fumaça do `makensis`. |
+| `tests/make-installer.test.sh` | **Criar.** Teste de fumaça baseado em asserções estáticas via `grep`, sem depender de `makensis`. |
 | `README.md` | **Modificar.** Tabela, seção Windows, pré-requisitos locais. |
 
 ## Fora de escopo

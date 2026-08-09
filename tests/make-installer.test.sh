@@ -80,13 +80,13 @@ has "SHCTX" \
 
 # --- optional components: desktop shortcut off, file association on --------
 
-grep -q 'Section "Desktop shortcut" SecDesktop' "$NSI" \
+grep -q '"Desktop shortcut" SecDesktop' "$NSI" \
   && check "secao de atalho de desktop existe" 1 \
   || check "secao de atalho de desktop existe" 0 "secao nao encontrada"
 
-grep -q 'SectionSetFlags ${SecDesktop} 0' "$NSI" \
-  && check "atalho de desktop desmarcado por padrao" 1 \
-  || check "atalho de desktop desmarcado por padrao" 0 'SectionSetFlags ${SecDesktop} 0 nao encontrado'
+grep -q 'Section /o "Desktop shortcut" SecDesktop' "$NSI" \
+  && check "atalho de desktop desmarcado por padrao (Section /o)" 1 \
+  || check "atalho de desktop desmarcado por padrao (Section /o)" 0 'Section /o "Desktop shortcut" SecDesktop nao encontrado'
 
 grep -q 'Section "Associate .aseprite and .ase files with Aseprite" SecFileAssoc' "$NSI" \
   && check "secao de associacao de arquivo existe" 1 \
@@ -106,9 +106,9 @@ has 'RMDir /r "$INSTDIR\data"' \
   && check "limpa data\\ antes de copiar (evita arquivo orfao apos upgrade)" 1 \
   || check "limpa data\\ antes de copiar (evita arquivo orfao apos upgrade)" 0 "RMDir /r do data nao encontrado"
 
-if grep -q "aseprite.ini" "$NSI"; then
+if grep -qE '^\s*File.*aseprite\.ini' "$NSI"; then
   check "nao copia aseprite.ini (versao instalada nao e portatil)" 0 \
-    "installer.nsi menciona aseprite.ini -- nao deveria copiar o marcador portatil"
+    "installer.nsi copia aseprite.ini -- nao deveria copiar o marcador portatil"
 else
   check "nao copia aseprite.ini (versao instalada nao e portatil)" 1
 fi

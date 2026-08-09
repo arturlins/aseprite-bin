@@ -39,7 +39,7 @@ Unicode true
 !include "FileFunc.nsh"
 !include "WinMessages.nsh"
 
-Name "Aseprite"
+Name "Aseprite ${VERSION}"
 OutFile "${OUTFILE}"
 
 ; Starts unelevated always -- see PageScope/PageScopeLeave below for when and
@@ -66,7 +66,12 @@ Page custom PageScope PageScopeLeave
 
 !insertmacro MUI_PAGE_INSTFILES
 
-!define MUI_FINISHPAGE_RUN "$INSTDIR\aseprite.exe"
+; Launched via explorer.exe (not the direct path) so Aseprite's first run
+; inherits the shell's normal, unelevated token instead of the installer's
+; -- otherwise an "all users" install (which runs elevated) would write the
+; user's first-run settings into the admin's profile.
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION "RunAseprite"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -84,6 +89,16 @@ Function PageScope
   ClearErrors
   ${GetOptions} $R0 "/ALLUSERS" $R1
   ${IfNot} ${Errors}
+    ; Confirm the relaunch actually landed elevated before trusting the flag
+    ; -- someone could pass /ALLUSERS directly on the command line, or the
+    ; relaunch could theoretically land here without elevation.
+    Call IsElevated
+    Pop $0
+    ${If} $0 == "0"
+      MessageBox MB_OK|MB_ICONEXCLAMATION \
+        "Administrator rights are required to install for all users.$\r$\n$\r$\nRestart the installer and either accept the elevation prompt, or choose 'Install for me only' instead."
+      Quit
+    ${EndIf}
     StrCpy $Scope "all"
     SetShellVarContext all
     StrCpy $INSTDIR "$PROGRAMFILES64\Aseprite"
@@ -151,26 +166,28 @@ FunctionEnd
 
 ; --- install sections --------------------------------------------------------
 
-Function .onInit
-  ; Desktop shortcut defaults to unselected. File association defaults to
-  ; selected -- that is simply a Section's default state, so nothing to do
-  ; for it here.
-  SectionSetFlags ${SecDesktop} 0
+Function RunAseprite
+  Exec '"$WINDIR\explorer.exe" "$INSTDIR\aseprite.exe"'
 FunctionEnd
 
 Section "-core" SecCore
   SetOutPath "$INSTDIR"
 
   ; Wipe data\ before copying fresh files so an upgrade never leaves behind
-  ; files a newer Aseprite version no longer ships.
-  RMDir /r "$INSTDIR\data"
+  ; files a newer Aseprite version no longer ships. Guarded on aseprite.exe
+  ; already being present so that redirecting $INSTDIR (via the Directory
+  ; page) at an arbitrary, unrelated existing folder never nukes a data\
+  ; subdirectory that has nothing to do with Aseprite.
+  ${If} ${FileExists} "$INSTDIR\aseprite.exe"
+    RMDir /r "$INSTDIR\data"
+  ${EndIf}
 
   File "${SRCDIR}\aseprite.exe"
   File /r "${SRCDIR}\data"
   File /r "${SRCDIR}\docs"
-  ; NOTE: The portable config marker is intentionally not copied. This allows
-  ; the portable version to keep settings next to the executable, while the
-  ; installed version behaves like a normal Windows program using %APPDATA%.
+  ; aseprite.ini is deliberately not copied: that marker is what makes the
+  ; portable build keep its settings next to the executable. The installed
+  ; copy behaves like a normal Windows program and uses %APPDATA%.
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -192,11 +209,30 @@ Section "-core" SecCore
   WriteRegDWORD SHCTX "${UNINST_KEY}" "EstimatedSize" "$0"
 SectionEnd
 
-Section "Desktop shortcut" SecDesktop
+; /o: unselected by default. This is the idiomatic NSIS way to default a
+; component off -- doing it via .onInit + SectionSetFlags ${SecDesktop} 0
+; would forward-reference ${SecDesktop} before the preprocessor has seen
+; this Section declaration, which silently resolves to section index 0
+; (SecCore, the mandatory core install) instead.
+Section /o "Desktop shortcut" SecDesktop
   CreateShortcut "$DESKTOP\Aseprite.lnk" "$INSTDIR\aseprite.exe"
 SectionEnd
 
 Section "Associate .aseprite and .ase files with Aseprite" SecFileAssoc
+  ; Back up whatever the extensions were previously bound to (if anything,
+  ; and if it isn't already us) so the uninstaller can restore it instead of
+  ; leaving the extension completely unassociated.
+  ReadRegStr $0 SHCTX "Software\Classes\.aseprite" ""
+  ${If} $0 != "Aseprite.Document"
+  ${AndIf} $0 != ""
+    WriteRegStr SHCTX "Software\Classes\.aseprite" "Aseprite.Document_backup" "$0"
+  ${EndIf}
+  ReadRegStr $0 SHCTX "Software\Classes\.ase" ""
+  ${If} $0 != "Aseprite.Document"
+  ${AndIf} $0 != ""
+    WriteRegStr SHCTX "Software\Classes\.ase" "Aseprite.Document_backup" "$0"
+  ${EndIf}
+
   WriteRegStr SHCTX "Software\Classes\Aseprite.Document" "" "Aseprite Sprite"
   WriteRegStr SHCTX "Software\Classes\Aseprite.Document\DefaultIcon" "" "$INSTDIR\aseprite.exe,0"
   WriteRegStr SHCTX "Software\Classes\Aseprite.Document\shell\open\command" "" '"$INSTDIR\aseprite.exe" "%1"'
@@ -215,6 +251,38 @@ SectionEnd
 
 ; --- uninstaller --------------------------------------------------------------
 
+; RequestExecutionLevel user (above) governs the generated uninstaller too --
+; NSIS has no separate directive for it. The uninstaller's manifest is
+; asInvoker, so Windows will NOT auto-elevate it the way it does unmanifested
+; legacy installers. Without this check, uninstalling an "all users" install
+; (Program Files, HKLM, common Start Menu) would silently fail every delete
+; and registry write while still reporting success. Uninstaller-side code
+; lives in the un. namespace, so the installer's IsElevated Function can't be
+; called from here -- this inlines an equivalent write-probe.
+Function un.onInit
+  ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallScope"
+  ${If} $0 == "all"
+    ClearErrors
+    FileOpen $1 "$PROGRAMFILES64\aseprite-setup-write-test.tmp" w
+    ${If} ${Errors}
+      ; Not elevated -- relaunch this uninstaller elevated and quit this
+      ; instance. NSIS already handles copying itself out of $INSTDIR before
+      ; deleting that directory; this only adds the elevation step in front
+      ; of that existing behavior.
+      ClearErrors
+      ExecShell "runas" "$EXEPATH"
+      ${If} ${Errors}
+        MessageBox MB_OK|MB_ICONEXCLAMATION \
+          "Administrator rights are required to uninstall this copy of Aseprite.$\r$\n$\r$\nRestart the uninstaller and accept the elevation prompt."
+      ${EndIf}
+      Quit
+    ${Else}
+      FileClose $1
+      Delete "$PROGRAMFILES64\aseprite-setup-write-test.tmp"
+    ${EndIf}
+  ${EndIf}
+FunctionEnd
+
 Section "Uninstall"
   ; $INSTDIR is already correct (NSIS points an uninstaller's $INSTDIR at the
   ; folder it is running from). The registry hive to clean up is not, since
@@ -225,7 +293,6 @@ Section "Uninstall"
   ${If} $0 == "all"
     SetShellVarContext all
   ${Else}
-    ReadRegStr $0 HKCU "${UNINST_KEY}" "InstallScope"
     SetShellVarContext current
   ${EndIf}
 
@@ -240,16 +307,30 @@ Section "Uninstall"
   RMDir "$SMPROGRAMS\Aseprite"
   Delete "$DESKTOP\Aseprite.lnk"
 
-  ; Only remove the extension keys if they still point at us -- a later
+  ; Only touch the extension keys if they still point at us -- a later
   ; install of something else claiming .aseprite/.ase should not be clobbered
-  ; by an unrelated Aseprite uninstall.
+  ; by an unrelated Aseprite uninstall. If we backed up a prior owner's
+  ; value at install time, restore it instead of leaving the extension
+  ; completely unassociated.
   ReadRegStr $0 SHCTX "Software\Classes\.aseprite" ""
   ${If} $0 == "Aseprite.Document"
-    DeleteRegKey SHCTX "Software\Classes\.aseprite"
+    ReadRegStr $1 SHCTX "Software\Classes\.aseprite" "Aseprite.Document_backup"
+    ${If} $1 != ""
+      WriteRegStr SHCTX "Software\Classes\.aseprite" "" "$1"
+      DeleteRegValue SHCTX "Software\Classes\.aseprite" "Aseprite.Document_backup"
+    ${Else}
+      DeleteRegKey SHCTX "Software\Classes\.aseprite"
+    ${EndIf}
   ${EndIf}
   ReadRegStr $0 SHCTX "Software\Classes\.ase" ""
   ${If} $0 == "Aseprite.Document"
-    DeleteRegKey SHCTX "Software\Classes\.ase"
+    ReadRegStr $1 SHCTX "Software\Classes\.ase" "Aseprite.Document_backup"
+    ${If} $1 != ""
+      WriteRegStr SHCTX "Software\Classes\.ase" "" "$1"
+      DeleteRegValue SHCTX "Software\Classes\.ase" "Aseprite.Document_backup"
+    ${Else}
+      DeleteRegKey SHCTX "Software\Classes\.ase"
+    ${EndIf}
   ${EndIf}
   DeleteRegKey SHCTX "Software\Classes\Aseprite.Document"
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
