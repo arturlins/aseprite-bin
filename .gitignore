@@ -3,3 +3,4 @@ skia*
 build
 aseprite*
 dist
+.worktrees
