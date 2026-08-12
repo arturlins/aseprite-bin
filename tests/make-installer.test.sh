@@ -108,6 +108,24 @@ has "\${NSD_OnClick} \$ScopeCurrentUserRadio OnScopeRadioClick" \
   && check "escudo atualiza ao clicar no radio 'so para mim'" 1 \
   || check "escudo atualiza ao clicar no radio 'so para mim'" 0 "NSD_OnClick ScopeCurrentUserRadio OnScopeRadioClick nao encontrado"
 
+# --- upgrade cross-scope cleanup ---------------------------------------------
+
+has "/CLEANUPALLUSERS" \
+  && check "upgrade cross-scope usa uma marca de relancamento propria (/CLEANUPALLUSERS)" 1 \
+  || check "upgrade cross-scope usa uma marca de relancamento propria (/CLEANUPALLUSERS)" 0 "/CLEANUPALLUSERS nao encontrado"
+
+has 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"' \
+  && check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 1 \
+  || check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 0 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation" nao encontrado'
+
+has 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"' \
+  && check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 1 \
+  || check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 0 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation" nao encontrado'
+
+has 'ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"' \
+  && check "remove residuo 'todos os usuarios' ao instalar 'so para mim' (ja elevado)" 1 \
+  || check "remove residuo 'todos os usuarios' ao instalar 'so para mim' (ja elevado)" 0 'ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation" nao encontrado'
+
 # --- optional components: desktop shortcut off, file association on --------
 
 grep -q '"Desktop shortcut" SecDesktop' "$NSI" \

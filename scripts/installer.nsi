@@ -111,6 +111,25 @@ Function PageScope
     Abort ; skip showing this page
   ${EndIf}
 
+  ; /CLEANUPALLUSERS is the same idea as /ALLUSERS above, for the opposite
+  ; case: the chosen scope stays "user", the elevated relaunch is only so
+  ; SecCore can remove a leftover all-users installation before continuing.
+  ClearErrors
+  ${GetOptions} $R0 "/CLEANUPALLUSERS" $R1
+  ${IfNot} ${Errors}
+    Call IsElevated
+    Pop $0
+    ${If} $0 == "0"
+      MessageBox MB_OK|MB_ICONEXCLAMATION \
+        "Administrator rights are required to remove the existing all-users installation before continuing.$\r$\n$\r$\nRestart the installer and accept the elevation prompt, or uninstall the existing Aseprite installation manually first."
+      Quit
+    ${EndIf}
+    StrCpy $Scope "user"
+    SetShellVarContext current
+    StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Aseprite"
+    Abort ; skip showing this page -- the choice was already made pre-relaunch
+  ${EndIf}
+
   !insertmacro MUI_HEADER_TEXT "Choose Install Scope" "Who should be able to run Aseprite?"
 
   nsDialogs::Create 1018
@@ -200,6 +219,24 @@ Function PageScopeLeave
     SetShellVarContext all
     StrCpy $INSTDIR "$PROGRAMFILES64\Aseprite"
   ${Else}
+    ; If a previous all-users installation is on record, removing it needs
+    ; elevation even though this run's own scope doesn't -- relaunch with a
+    ; marker that keeps $Scope "user" instead of forcing "all".
+    ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
+    ${If} $0 != ""
+    ${AndIf} ${FileExists} "$0\uninstall.exe"
+      Call IsElevated
+      Pop $1
+      ${If} $1 == "0"
+        ClearErrors
+        ExecShell "runas" "$EXEPATH" "/CLEANUPALLUSERS"
+        ${If} ${Errors}
+          MessageBox MB_OK|MB_ICONEXCLAMATION \
+            "Administrator rights are required to remove the existing all-users installation before continuing.$\r$\n$\r$\nRestart the installer and accept the elevation prompt, or uninstall the existing Aseprite installation manually first."
+        ${EndIf}
+        Quit
+      ${EndIf}
+    ${EndIf}
     SetShellVarContext current
     StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Aseprite"
   ${EndIf}
@@ -225,6 +262,26 @@ Section "-core" SecCore
   ${AndIf} ${FileExists} "$0\uninstall.exe"
     DetailPrint "Removing previous installation..."
     ExecWait '"$0\uninstall.exe" /S _?=$0'
+  ${EndIf}
+
+  ; Cross-scope upgrade: also clean up a stray installation in the OTHER
+  ; hive, if any. HKCU never needs elevation to remove. HKLM does, and was
+  ; already secured back in PageScopeLeave via the /CLEANUPALLUSERS relaunch
+  ; before this section ever runs.
+  ${If} $Scope == "all"
+    ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
+    ${If} $1 != ""
+    ${AndIf} ${FileExists} "$1\uninstall.exe"
+      DetailPrint "Removing previous per-user installation..."
+      ExecWait '"$1\uninstall.exe" /S _?=$1'
+    ${EndIf}
+  ${Else}
+    ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"
+    ${If} $1 != ""
+    ${AndIf} ${FileExists} "$1\uninstall.exe"
+      DetailPrint "Removing previous all-users installation..."
+      ExecWait '"$1\uninstall.exe" /S _?=$1'
+    ${EndIf}
   ${EndIf}
 
   SetOutPath "$INSTDIR"
