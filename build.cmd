@@ -149,6 +149,7 @@ cmake.exe                                                     ^
   -DCMAKE_POLICY_DEFAULT_CMP0091=NEW                          ^
   -DCMAKE_POLICY_DEFAULT_CMP0092=NEW                          ^
   -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded                  ^
+  -DUPDATE_VERSION_WITH_GIT=OFF                               ^
   -DENABLE_CCACHE=OFF                                         ^
   -DOPENSSL_USE_STATIC_LIBS=TRUE                              ^
   -DLAF_BACKEND=skia                                          ^
