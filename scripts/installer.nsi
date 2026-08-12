@@ -53,6 +53,7 @@ RequestExecutionLevel user
 !define MUI_ABORTWARNING
 !define MUI_ICON "${ICONFILE}"
 !define MUI_UNICON "${ICONFILE}"
+!define BCM_SETSHIELD 0x0000160C
 
 Var Scope                 ; "all" or "user", decided on the scope page
 Var ScopeAllUsersRadio
@@ -118,11 +119,31 @@ Function PageScope
   ${NSD_CreateRadioButton} 0 20u 100% 12u "Install for all users (requires administrator rights)"
   Pop $ScopeAllUsersRadio
   ${NSD_SetState} $ScopeAllUsersRadio ${BST_CHECKED}
+  ${NSD_OnClick} $ScopeAllUsersRadio UpdateScopeShield
 
   ${NSD_CreateRadioButton} 0 40u 100% 12u "Install for me only (no administrator rights required)"
   Pop $ScopeCurrentUserRadio
+  ${NSD_OnClick} $ScopeCurrentUserRadio UpdateScopeShield
+
+  Call UpdateScopeShield ; initial state: "all users" is preselected above
 
   nsDialogs::Show
+FunctionEnd
+
+; The wizard's Next/Install/Finish button is a single control owned by the
+; parent frame ($HWNDPARENT), shared across every page -- not recreated per
+; page. Control ID 1 is that button in every MUI2 page. Toggling the shield
+; here only affects it while this function is called; PageScopeLeave turns
+; it back off before moving on so it doesn't stay glued to Next on later,
+; unrelated pages (Directory, Components, Install).
+Function UpdateScopeShield
+  GetDlgItem $0 $HWNDPARENT 1
+  ${NSD_GetState} $ScopeAllUsersRadio $1
+  ${If} $1 == ${BST_CHECKED}
+    SendMessage $0 ${BCM_SETSHIELD} 0 1
+  ${Else}
+    SendMessage $0 ${BCM_SETSHIELD} 0 0
+  ${EndIf}
 FunctionEnd
 
 ; Reliable elevation check: try to write a throwaway file into Program Files.
@@ -148,6 +169,12 @@ Function PageScopeLeave
   ${Else}
     StrCpy $Scope "user"
   ${EndIf}
+
+  ; The Next button belongs to the wizard frame, not this page -- turn the
+  ; shield back off before moving on so it doesn't stay glued to Next on
+  ; every later page.
+  GetDlgItem $0 $HWNDPARENT 1
+  SendMessage $0 ${BCM_SETSHIELD} 0 0
 
   ${If} $Scope == "all"
     Call IsElevated

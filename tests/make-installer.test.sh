@@ -86,6 +86,28 @@ has "SHCTX" \
   && check "registro usa SHCTX (resolve HKLM/HKCU pelo escopo)" 1 \
   || check "registro usa SHCTX (resolve HKLM/HKCU pelo escopo)" 0 "SHCTX nao encontrado"
 
+# --- UAC shield on the scope page's Next button -----------------------------
+
+has "!define BCM_SETSHIELD 0x0000160C" \
+  && check "define nativo BCM_SETSHIELD (sem plugin UAC.dll de terceiro)" 1 \
+  || check "define nativo BCM_SETSHIELD (sem plugin UAC.dll de terceiro)" 0 "BCM_SETSHIELD nao encontrado"
+
+has "GetDlgItem \$0 \$HWNDPARENT 1" \
+  && check "pega o botao Next do wizard para aplicar o escudo" 1 \
+  || check "pega o botao Next do wizard para aplicar o escudo" 0 "GetDlgItem \$0 \$HWNDPARENT 1 nao encontrado"
+
+has "Function UpdateScopeShield" \
+  && check "funcao UpdateScopeShield existe" 1 \
+  || check "funcao UpdateScopeShield existe" 0 "Function UpdateScopeShield nao encontrada"
+
+has "\${NSD_OnClick} \$ScopeAllUsersRadio UpdateScopeShield" \
+  && check "escudo atualiza ao clicar no radio 'todos os usuarios'" 1 \
+  || check "escudo atualiza ao clicar no radio 'todos os usuarios'" 0 "NSD_OnClick ScopeAllUsersRadio UpdateScopeShield nao encontrado"
+
+has "\${NSD_OnClick} \$ScopeCurrentUserRadio UpdateScopeShield" \
+  && check "escudo atualiza ao clicar no radio 'so para mim'" 1 \
+  || check "escudo atualiza ao clicar no radio 'so para mim'" 0 "NSD_OnClick ScopeCurrentUserRadio UpdateScopeShield nao encontrado"
+
 # --- optional components: desktop shortcut off, file association on --------
 
 grep -q '"Desktop shortcut" SecDesktop' "$NSI" \
