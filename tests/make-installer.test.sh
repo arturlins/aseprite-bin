@@ -110,21 +110,37 @@ has "\${NSD_OnClick} \$ScopeCurrentUserRadio OnScopeRadioClick" \
 
 # --- upgrade cross-scope cleanup ---------------------------------------------
 
-has "/CLEANUPALLUSERS" \
-  && check "upgrade cross-scope usa uma marca de relancamento propria (/CLEANUPALLUSERS)" 1 \
-  || check "upgrade cross-scope usa uma marca de relancamento propria (/CLEANUPALLUSERS)" 0 "/CLEANUPALLUSERS nao encontrado"
-
 has 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"' \
   && check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 1 \
   || check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 0 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation" nao encontrado'
+
+has 'ExecShellWait "runas" "$0\uninstall.exe" "/S _?=$0"' \
+  && check "remove residuo 'todos os usuarios' elevando so a remocao (ExecShellWait), nao o instalador inteiro" 1 \
+  || check "remove residuo 'todos os usuarios' elevando so a remocao (ExecShellWait), nao o instalador inteiro" 0 'ExecShellWait "runas" "$0\uninstall.exe" "/S _?=$0" nao encontrado'
 
 has 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"' \
   && check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 1 \
   || check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 0 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation" nao encontrado'
 
-has 'ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation"' \
-  && check "remove residuo 'todos os usuarios' ao instalar 'so para mim' (ja elevado)" 1 \
-  || check "remove residuo 'todos os usuarios' ao instalar 'so para mim' (ja elevado)" 0 'ReadRegStr $1 HKLM "${UNINST_KEY}" "InstallLocation" nao encontrado'
+# --- upgrade leftovers: old uninstall.exe/folder cleaned up after removal ---
+
+has 'Delete "$0\uninstall.exe"' \
+  && check "upgrade apaga o uninstall.exe antigo apos a remocao (nao deixa residuo)" 1 \
+  || check "upgrade apaga o uninstall.exe antigo apos a remocao (nao deixa residuo)" 0 'Delete "$0\uninstall.exe" nao encontrado'
+
+has 'RMDir "$0"' \
+  && check "upgrade remove a pasta antiga apos a remocao (nao deixa residuo)" 1 \
+  || check "upgrade remove a pasta antiga apos a remocao (nao deixa residuo)" 0 'RMDir "$0" nao encontrado'
+
+# --- silent installs are rejected (scope choice cannot be skipped) ----------
+
+has "Function .onInit" \
+  && check "installer.nsi define .onInit" 1 \
+  || check "installer.nsi define .onInit" 0 "Function .onInit nao encontrada"
+
+has "\${If} \${Silent}" \
+  && check "instalacao silenciosa (/S) e rejeitada (Scope/INSTDIR ficariam vazios)" 1 \
+  || check "instalacao silenciosa (/S) e rejeitada (Scope/INSTDIR ficariam vazios)" 0 'Silent guard nao encontrado'
 
 # --- optional components: desktop shortcut off, file association on --------
 
