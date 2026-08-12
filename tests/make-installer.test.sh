@@ -100,13 +100,13 @@ has "Function UpdateScopeShield" \
   && check "funcao UpdateScopeShield existe" 1 \
   || check "funcao UpdateScopeShield existe" 0 "Function UpdateScopeShield nao encontrada"
 
-has "\${NSD_OnClick} \$ScopeAllUsersRadio UpdateScopeShield" \
+has "\${NSD_OnClick} \$ScopeAllUsersRadio OnScopeRadioClick" \
   && check "escudo atualiza ao clicar no radio 'todos os usuarios'" 1 \
-  || check "escudo atualiza ao clicar no radio 'todos os usuarios'" 0 "NSD_OnClick ScopeAllUsersRadio UpdateScopeShield nao encontrado"
+  || check "escudo atualiza ao clicar no radio 'todos os usuarios'" 0 "NSD_OnClick ScopeAllUsersRadio OnScopeRadioClick nao encontrado"
 
-has "\${NSD_OnClick} \$ScopeCurrentUserRadio UpdateScopeShield" \
+has "\${NSD_OnClick} \$ScopeCurrentUserRadio OnScopeRadioClick" \
   && check "escudo atualiza ao clicar no radio 'so para mim'" 1 \
-  || check "escudo atualiza ao clicar no radio 'so para mim'" 0 "NSD_OnClick ScopeCurrentUserRadio UpdateScopeShield nao encontrado"
+  || check "escudo atualiza ao clicar no radio 'so para mim'" 0 "NSD_OnClick ScopeCurrentUserRadio OnScopeRadioClick nao encontrado"
 
 # --- optional components: desktop shortcut off, file association on --------
 

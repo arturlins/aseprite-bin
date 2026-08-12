@@ -119,15 +119,24 @@ Function PageScope
   ${NSD_CreateRadioButton} 0 20u 100% 12u "Install for all users (requires administrator rights)"
   Pop $ScopeAllUsersRadio
   ${NSD_SetState} $ScopeAllUsersRadio ${BST_CHECKED}
-  ${NSD_OnClick} $ScopeAllUsersRadio UpdateScopeShield
+  ${NSD_OnClick} $ScopeAllUsersRadio OnScopeRadioClick
 
   ${NSD_CreateRadioButton} 0 40u 100% 12u "Install for me only (no administrator rights required)"
   Pop $ScopeCurrentUserRadio
-  ${NSD_OnClick} $ScopeCurrentUserRadio UpdateScopeShield
+  ${NSD_OnClick} $ScopeCurrentUserRadio OnScopeRadioClick
 
   Call UpdateScopeShield ; initial state: "all users" is preselected above
 
   nsDialogs::Show
+FunctionEnd
+
+; ${NSD_OnClick} callbacks are always handed the clicked control's HWND on
+; NSIS's global stack and must Pop it (see nsDialogs Readme "Real-time
+; Notification"); the shield state depends on which radio is checked, not on
+; which one was clicked, so the value itself is discarded.
+Function OnScopeRadioClick
+  Pop $0
+  Call UpdateScopeShield
 FunctionEnd
 
 ; The wizard's Next/Install/Finish button is a single control owned by the
