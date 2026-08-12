@@ -110,6 +110,14 @@ has '"Software\Classes\.ase"' \
 
 # --- upgrade hygiene and portable/installed separation ----------------------
 
+has 'ReadRegStr $0 SHCTX "${UNINST_KEY}" "InstallLocation"' \
+  && check "upgrade le a instalacao anterior do mesmo escopo no registro" 1 \
+  || check "upgrade le a instalacao anterior do mesmo escopo no registro" 0 "ReadRegStr SHCTX InstallLocation nao encontrado"
+
+has '"$0\uninstall.exe" /S _?=$0' \
+  && check "upgrade desinstala a versao anterior por completo antes de copiar (espera terminar de verdade)" 1 \
+  || check "upgrade desinstala a versao anterior por completo antes de copiar (espera terminar de verdade)" 0 '"$0\uninstall.exe" /S _?=$0 nao encontrado'
+
 has 'RMDir /r "$INSTDIR\data"' \
   && check "limpa data\\ antes de copiar (evita arquivo orfao apos upgrade)" 1 \
   || check "limpa data\\ antes de copiar (evita arquivo orfao apos upgrade)" 0 "RMDir /r do data nao encontrado"

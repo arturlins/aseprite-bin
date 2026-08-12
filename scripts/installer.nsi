@@ -176,13 +176,30 @@ Function RunAseprite
 FunctionEnd
 
 Section "-core" SecCore
+  ; Same-scope upgrade: if a previous installation is on record for this
+  ; scope's hive, remove it completely and synchronously before copying the
+  ; new files -- more robust than only wiping data\ below, and keeps
+  ; shortcuts/registry/file-association state consistent with the new
+  ; version instead of layering on top of the old one. _?=$0 stops the
+  ; generated uninstaller from copying itself to %TEMP% and relaunching,
+  ; which would otherwise make ExecWait return before the removal actually
+  ; finished.
+  ReadRegStr $0 SHCTX "${UNINST_KEY}" "InstallLocation"
+  ${If} $0 != ""
+  ${AndIf} ${FileExists} "$0\uninstall.exe"
+    DetailPrint "Removing previous installation..."
+    ExecWait '"$0\uninstall.exe" /S _?=$0'
+  ${EndIf}
+
   SetOutPath "$INSTDIR"
 
   ; Wipe data\ before copying fresh files so an upgrade never leaves behind
   ; files a newer Aseprite version no longer ships. Guarded on aseprite.exe
   ; already being present so that redirecting $INSTDIR (via the Directory
   ; page) at an arbitrary, unrelated existing folder never nukes a data\
-  ; subdirectory that has nothing to do with Aseprite.
+  ; subdirectory that has nothing to do with Aseprite. Kept as a fallback
+  ; even after the full-uninstall pass above, for a stale registry entry
+  ; whose uninstall.exe is missing, or an install that predates it.
   ${If} ${FileExists} "$INSTDIR\aseprite.exe"
     RMDir /r "$INSTDIR\data"
   ${EndIf}
