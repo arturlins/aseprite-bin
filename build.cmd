@@ -175,6 +175,6 @@ echo Done: %OUTDIR%
 rem *** installer (NSIS) ***
 
 set SETUPFILE=dist\aseprite-%ASEPRITE_VERSION%-windows-x64-setup.exe
-%MAKENSIS% /WX /DVERSION=%ASEPRITE_VERSION% /DVERSION_NUMBER=%ASEPRITE_VERSION_NUMBER% "/DSRCDIR=%CD%\%OUTDIR%" "/DOUTFILE=%CD%\%SETUPFILE%" scripts\installer.nsi || echo failed to build installer && exit /b 1
+%MAKENSIS% /WX /DVERSION=%ASEPRITE_VERSION% /DVERSION_NUMBER=%ASEPRITE_VERSION_NUMBER% "/DSRCDIR=%CD%\%OUTDIR%" "/DOUTFILE=%CD%\%SETUPFILE%" "/DICONFILE=%CD%\aseprite\data\icons\ase.ico" scripts\installer.nsi || echo failed to build installer && exit /b 1
 
 echo Done: %SETUPFILE%

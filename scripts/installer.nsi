@@ -30,6 +30,9 @@
 !ifndef OUTFILE
   !error "OUTFILE not defined -- pass /DOUTFILE=<path> to makensis"
 !endif
+!ifndef ICONFILE
+  !error "ICONFILE not defined -- pass /DICONFILE=<path> to makensis"
+!endif
 
 Unicode true
 
@@ -48,6 +51,8 @@ RequestExecutionLevel user
 
 !define UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\Aseprite"
 !define MUI_ABORTWARNING
+!define MUI_ICON "${ICONFILE}"
+!define MUI_UNICON "${ICONFILE}"
 
 Var Scope                 ; "all" or "user", decided on the scope page
 Var ScopeAllUsersRadio

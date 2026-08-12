@@ -42,7 +42,7 @@ has() {
 
 # --- required command-line defines, and that build.cmd supplies all of them -
 
-for define in VERSION VERSION_NUMBER SRCDIR OUTFILE; do
+for define in VERSION VERSION_NUMBER SRCDIR OUTFILE ICONFILE; do
   if grep -q "!ifndef $define" "$NSI"; then
     check "installer.nsi exige /D$define" 1
   else
@@ -55,6 +55,14 @@ for define in VERSION VERSION_NUMBER SRCDIR OUTFILE; do
     check "build.cmd passa /D$define" 0 "/D$define= nao encontrado em build.cmd"
   fi
 done
+
+has '!define MUI_ICON "${ICONFILE}"' \
+  && check "setup.exe usa o icone do Aseprite" 1 \
+  || check "setup.exe usa o icone do Aseprite" 0 '!define MUI_ICON "${ICONFILE}" nao encontrado'
+
+has '!define MUI_UNICON "${ICONFILE}"' \
+  && check "uninstall.exe usa o icone do Aseprite" 1 \
+  || check "uninstall.exe usa o icone do Aseprite" 0 '!define MUI_UNICON "${ICONFILE}" nao encontrado'
 
 # --- dual-scope install: never forces elevation, self-elevates on demand ----
 
