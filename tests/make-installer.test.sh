@@ -129,6 +129,23 @@ has '${GetOptions} $R0 "/CLEANUPPATH=" $R2' \
   && check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 1 \
   || check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 0 '${GetOptions} $R0 "/CLEANUPPATH=" $R2 nao encontrado'
 
+# /CLEANUPPATH must be handled in .onInit (runs before ANY page) rather than
+# in PageScope (which only runs after the user clicks past MUI_PAGE_WELCOME):
+# ExecShellWait in PageScopeLeave blocks waiting for the whole relaunched
+# process to exit, with no expectation a second wizard window ever appears.
+# Handling it in PageScope instead deadlocks the parent on the elevated
+# child's unseen Welcome page -- a real bug found in Task 5 manual testing.
+init_line=$(grep -n '^Function \.onInit' "$NSI" | head -1 | cut -d: -f1)
+pagescope_line=$(grep -n '^Function PageScope$' "$NSI" | head -1 | cut -d: -f1)
+cleanuppath_line=$(grep -n 'GetOptions} \$R0 "/CLEANUPPATH=" \$R2' "$NSI" | head -1 | cut -d: -f1)
+if [ -n "$init_line" ] && [ -n "$pagescope_line" ] && [ -n "$cleanuppath_line" ] \
+  && [ "$cleanuppath_line" -gt "$init_line" ] && [ "$cleanuppath_line" -lt "$pagescope_line" ]; then
+  check "/CLEANUPPATH e tratado em .onInit, antes de qualquer pagina (nao trava esperando um clique em Welcome nunca visto)" 1
+else
+  check "/CLEANUPPATH e tratado em .onInit, antes de qualquer pagina (nao trava esperando um clique em Welcome nunca visto)" 0 \
+    "/CLEANUPPATH nao esta entre Function .onInit e Function PageScope"
+fi
+
 has 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"' \
   && check "remove residuo 'so para mim' ao instalar 'todos os usuarios', so antes de elevar (HKCU nunca e confiavel ja elevado)" 1 \
   || check "remove residuo 'so para mim' ao instalar 'todos os usuarios', so antes de elevar (HKCU nunca e confiavel ja elevado)" 0 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation" nao encontrado'

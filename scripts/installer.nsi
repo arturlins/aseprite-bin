@@ -98,6 +98,34 @@ Function .onInit
       "Silent installation is not supported -- this installer needs to ask whether to install for all users or just the current user."
     Quit
   ${EndIf}
+
+  ; /CLEANUPPATH=<dir> is a narrowly-scoped relaunch marker (see
+  ; PageScopeLeave for how and why it's invoked): the directory was already
+  ; resolved from HKLM, unelevated, before this relaunch. Handled here in
+  ; .onInit -- which runs before ANY page, including MUI_PAGE_WELCOME --
+  ; rather than in PageScope (as an earlier version of this fix did):
+  ; PageScope only runs once the user clicks past Welcome, but
+  ; PageScopeLeave's ExecShellWait blocks waiting for this whole relaunched
+  ; process to exit, with no expectation that a second wizard window will
+  ; ever appear. Leaving the check in PageScope left that second, elevated
+  ; process sitting on its own unseen/unexpected Welcome page forever,
+  ; deadlocking the parent -- reported after real-machine testing (Task 5).
+  ; This branch does nothing but remove that one already-resolved
+  ; installation and Quit, before any UI is ever shown.
+  ${GetParameters} $R0
+  ClearErrors
+  ${GetOptions} $R0 "/CLEANUPPATH=" $R2
+  ${IfNot} ${Errors}
+    Call IsElevated
+    Pop $0
+    ${If} $0 == "1"
+    ${AndIf} ${FileExists} "$R2\uninstall.exe"
+      ExecWait '"$R2\uninstall.exe" /S _?=$R2'
+      Delete "$R2\uninstall.exe"
+      RMDir "$R2"
+    ${EndIf}
+    Quit
+  ${EndIf}
 FunctionEnd
 
 ; --- scope page --------------------------------------------------------------
@@ -124,27 +152,6 @@ Function PageScope
     SetShellVarContext all
     StrCpy $INSTDIR "$PROGRAMFILES64\Aseprite"
     Abort ; skip showing this page
-  ${EndIf}
-
-  ; /CLEANUPPATH=<dir> is a narrowly-scoped relaunch marker: the directory
-  ; was already resolved from HKLM by PageScopeLeave, unelevated, before
-  ; this relaunch -- see the comment there for why that matters. This
-  ; branch does nothing but remove that one already-resolved installation
-  ; and Quit; it deliberately never falls through into the rest of this
-  ; page or into SecCore, so it can't be tricked into running any other,
-  ; HKCU-trusting upgrade logic with the admin rights this relaunch has.
-  ClearErrors
-  ${GetOptions} $R0 "/CLEANUPPATH=" $R2
-  ${IfNot} ${Errors}
-    Call IsElevated
-    Pop $0
-    ${If} $0 == "1"
-    ${AndIf} ${FileExists} "$R2\uninstall.exe"
-      ExecWait '"$R2\uninstall.exe" /S _?=$R2'
-      Delete "$R2\uninstall.exe"
-      RMDir "$R2"
-    ${EndIf}
-    Quit
   ${EndIf}
 
   !insertmacro MUI_HEADER_TEXT "Choose Install Scope" "Who should be able to run Aseprite?"
