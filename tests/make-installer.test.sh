@@ -114,13 +114,17 @@ has 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"' \
   && check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 1 \
   || check "detecta uma instalacao 'todos os usuarios' orfa ao escolher 'so para mim'" 0 'ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation" nao encontrado'
 
-has 'ExecShellWait "runas" "$0\uninstall.exe" "/S _?=$0"' \
-  && check "remove residuo 'todos os usuarios' elevando so a remocao (ExecShellWait), nao o instalador inteiro" 1 \
-  || check "remove residuo 'todos os usuarios' elevando so a remocao (ExecShellWait), nao o instalador inteiro" 0 'ExecShellWait "runas" "$0\uninstall.exe" "/S _?=$0" nao encontrado'
+has "ExecShellWait \"runas\" \"\$EXEPATH\" '/CLEANUPPATH=\"\$0\"'" \
+  && check "remove residuo 'todos os usuarios' elevando um relancamento proprio (/CLEANUPPATH), nao o uninstall.exe antigo direto" 1 \
+  || check "remove residuo 'todos os usuarios' elevando um relancamento proprio (/CLEANUPPATH), nao o uninstall.exe antigo direto" 0 "ExecShellWait runas EXEPATH /CLEANUPPATH nao encontrado"
+
+has '${GetOptions} $R0 "/CLEANUPPATH=" $R2' \
+  && check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 1 \
+  || check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 0 '${GetOptions} $R0 "/CLEANUPPATH=" $R2 nao encontrado'
 
 has 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"' \
-  && check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 1 \
-  || check "remove residuo 'so para mim' ao instalar 'todos os usuarios' (sem elevacao extra)" 0 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation" nao encontrado'
+  && check "remove residuo 'so para mim' ao instalar 'todos os usuarios', so antes de elevar (HKCU nunca e confiavel ja elevado)" 1 \
+  || check "remove residuo 'so para mim' ao instalar 'todos os usuarios', so antes de elevar (HKCU nunca e confiavel ja elevado)" 0 'ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation" nao encontrado'
 
 # --- upgrade leftovers: old uninstall.exe/folder cleaned up after removal ---
 

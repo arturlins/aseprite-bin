@@ -123,6 +123,27 @@ Function PageScope
     Abort ; skip showing this page
   ${EndIf}
 
+  ; /CLEANUPPATH=<dir> is a narrowly-scoped relaunch marker: the directory
+  ; was already resolved from HKLM by PageScopeLeave, unelevated, before
+  ; this relaunch -- see the comment there for why that matters. This
+  ; branch does nothing but remove that one already-resolved installation
+  ; and Quit; it deliberately never falls through into the rest of this
+  ; page or into SecCore, so it can't be tricked into running any other,
+  ; HKCU-trusting upgrade logic with the admin rights this relaunch has.
+  ClearErrors
+  ${GetOptions} $R0 "/CLEANUPPATH=" $R2
+  ${IfNot} ${Errors}
+    Call IsElevated
+    Pop $0
+    ${If} $0 == "1"
+    ${AndIf} ${FileExists} "$R2\uninstall.exe"
+      ExecWait '"$R2\uninstall.exe" /S _?=$R2'
+      Delete "$R2\uninstall.exe"
+      RMDir "$R2"
+    ${EndIf}
+    Quit
+  ${EndIf}
+
   !insertmacro MUI_HEADER_TEXT "Choose Install Scope" "Who should be able to run Aseprite?"
 
   nsDialogs::Create 1018
@@ -201,6 +222,29 @@ Function PageScopeLeave
     Call IsElevated
     Pop $0
     ${If} $0 == "0"
+      ; Clean up a stray per-user install now, while this process is still
+      ; unelevated -- HKCU is writable by this same user at ordinary
+      ; (medium) integrity, so trusting a path read from it to run
+      ; something at HIGH (admin) integrity would let this same user's own
+      ; unprivileged tooling plant and silently execute arbitrary code with
+      ; admin rights the moment they (or an unwitting admin) elevate this
+      ; installer -- a classic UAC-bypass pattern, and the actual
+      ; privilege-escalation surface an earlier version of the cross-scope
+      ; fix below had. Acting on HKCU only here, strictly before this
+      ; process ever elevates, keeps the integrity level matched; it is
+      ; deliberately never repeated after the elevation below, nor when the
+      ; whole installer was already launched elevated (e.g. "Run as
+      ; administrator"), where $0 would already be "1" and this block is
+      ; skipped entirely.
+      ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
+      ${If} $1 != ""
+      ${AndIf} ${FileExists} "$1\uninstall.exe"
+        DetailPrint "Removing previous per-user installation..."
+        ExecWait '"$1\uninstall.exe" /S _?=$1'
+        Delete "$1\uninstall.exe"
+        RMDir "$1"
+      ${EndIf}
+
       ClearErrors
       ExecShell "runas" "$EXEPATH" "/ALLUSERS"
       ${If} ${Errors}
@@ -212,23 +256,21 @@ Function PageScopeLeave
     SetShellVarContext all
     StrCpy $INSTDIR "$PROGRAMFILES64\Aseprite"
   ${Else}
-    ; If a previous all-users installation is on record, remove it now --
-    ; elevating only that removal via ExecShellWait "runas" on its own
-    ; uninstall.exe, not the whole installer. Relaunching the whole
-    ; installer elevated (the earlier approach here) had two real problems:
-    ; it read InstallLocation from HKCU while already elevated and executed
-    ; a path from that user-writable registry value (a privilege-escalation
-    ; surface), and if the UAC prompt were answered with a *different*
-    ; admin's credentials, the relaunched process -- and therefore this
-    ; whole install -- would silently run as that other user. Elevating
-    ; only the removal avoids both: nothing this process reads from HKCU is
-    ; ever executed while elevated, and the elevated child is scoped to
-    ; exactly one action (uninstall) tied to a specific HKLM-sourced path.
+    ; If a previous all-users installation is on record, remove it by
+    ; relaunching ourselves elevated with /CLEANUPPATH=<path>. The path was
+    ; already resolved from HKLM here, unelevated -- HKLM is writable only
+    ; by a previous elevated install, never by this (unelevated) process
+    ; itself, so forwarding it verbatim to the elevated relaunch (rather
+    ; than re-reading any registry key once elevated) is safe. That relaunch
+    ; runs nothing but /CLEANUPPATH's own handler in PageScope, which does
+    ; exactly one thing and Quits -- it never falls through into the rest
+    ; of the wizard, so it can't be tricked into running any of the other,
+    ; HKCU-trusting upgrade logic with admin rights.
     ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
     ${If} $0 != ""
     ${AndIf} ${FileExists} "$0\uninstall.exe"
       ClearErrors
-      ExecShellWait "runas" "$0\uninstall.exe" "/S _?=$0"
+      ExecShellWait "runas" "$EXEPATH" '/CLEANUPPATH="$0"'
       Pop $1
       ${If} ${Errors}
       ${OrIf} $1 == "error"
@@ -236,8 +278,6 @@ Function PageScopeLeave
           "Administrator rights are required to remove the existing all-users installation before continuing.$\r$\n$\r$\nRestart the installer and accept the elevation prompt, or uninstall the existing Aseprite installation manually first."
         Quit
       ${EndIf}
-      Delete "$0\uninstall.exe"
-      RMDir "$0"
     ${EndIf}
     SetShellVarContext current
     StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Aseprite"
@@ -268,22 +308,12 @@ Section "-core" SecCore
     RMDir "$0"
   ${EndIf}
 
-  ; Cross-scope upgrade, all-users side: clean up a stray per-user
-  ; installation, if any -- HKCU never needs elevation to remove. The
-  ; mirror case (a stray all-users installation when installing "only for
-  ; me") is handled earlier, in PageScopeLeave, before this section ever
-  ; runs -- see the comment there for why that removal is elevated
-  ; separately instead of here.
-  ${If} $Scope == "all"
-    ReadRegStr $1 HKCU "${UNINST_KEY}" "InstallLocation"
-    ${If} $1 != ""
-    ${AndIf} ${FileExists} "$1\uninstall.exe"
-      DetailPrint "Removing previous per-user installation..."
-      ExecWait '"$1\uninstall.exe" /S _?=$1'
-      Delete "$1\uninstall.exe"
-      RMDir "$1"
-    ${EndIf}
-  ${EndIf}
+  ; Cross-scope cleanup (a stray installation in the OTHER hive) is not
+  ; handled here. Both directions are handled earlier, in PageScopeLeave,
+  ; before this section ever runs -- either while still unelevated (the
+  ; HKCU/per-user direction, which must never be trusted once elevated) or
+  ; via the /CLEANUPPATH relaunch (the HKLM/all-users direction). See the
+  ; comments there for why each needs to happen at that specific point.
 
   SetOutPath "$INSTDIR"
 
