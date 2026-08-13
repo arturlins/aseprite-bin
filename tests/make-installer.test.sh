@@ -125,6 +125,23 @@ has "ExecShellWait \"runas\" \"\$EXEPATH\" '/CLEANUPPATH=\"\$0\"'" \
   && check "remove residuo 'todos os usuarios' elevando um relancamento proprio (/CLEANUPPATH), nao o uninstall.exe antigo direto" 1 \
   || check "remove residuo 'todos os usuarios' elevando um relancamento proprio (/CLEANUPPATH), nao o uninstall.exe antigo direto" 0 "ExecShellWait runas EXEPATH /CLEANUPPATH nao encontrado"
 
+# ExecShellWait, unlike ExecWait, does not reliably push a return value --
+# confirmed empirically (a relaunched process that exits via Quit from
+# .onInit, exactly what /CLEANUPPATH's handler does, leaves nothing on the
+# stack). A Pop here with nothing to pop corrupts NSIS's global stack and
+# sets ${Errors} as a side effect of the failed pop itself, which used to
+# trip the "administrator rights required" branch on every successful run
+# and quit the whole installer right after the cleanup, before the actual
+# install -- a real bug found in Task 5 manual testing.
+execshellwait_line=$(grep -n 'ExecShellWait "runas" "\$EXEPATH"' "$NSI" | head -1 | cut -d: -f1)
+next_line=$(sed -n "$((execshellwait_line + 1))p" "$NSI" | sed 's/^[[:space:]]*//')
+if [ -n "$execshellwait_line" ] && [ "$next_line" = '${If} ${Errors}' ]; then
+  check "nenhum Pop apos o ExecShellWait do relancamento /CLEANUPPATH (nao ha valor confiavel na pilha para tirar)" 1
+else
+  check "nenhum Pop apos o ExecShellWait do relancamento /CLEANUPPATH (nao ha valor confiavel na pilha para tirar)" 0 \
+    "linha apos ExecShellWait nao e '\${If} \${Errors}' (esperado: $next_line)"
+fi
+
 has '${GetOptions} $R0 "/CLEANUPPATH=" $R2' \
   && check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 1 \
   || check "/CLEANUPPATH e um relancamento auto-contido que so remove e sai (nao cai no resto do wizard)" 0 '${GetOptions} $R0 "/CLEANUPPATH=" $R2 nao encontrado'

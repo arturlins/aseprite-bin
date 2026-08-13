@@ -272,18 +272,30 @@ Function PageScopeLeave
     ; by a previous elevated install, never by this (unelevated) process
     ; itself, so forwarding it verbatim to the elevated relaunch (rather
     ; than re-reading any registry key once elevated) is safe. That relaunch
-    ; runs nothing but /CLEANUPPATH's own handler in PageScope, which does
+    ; runs nothing but /CLEANUPPATH's own handler in .onInit, which does
     ; exactly one thing and Quits -- it never falls through into the rest
     ; of the wizard, so it can't be tricked into running any of the other,
     ; HKCU-trusting upgrade logic with admin rights.
+    ;
+    ; No Pop after ExecShellWait: unlike ExecWait, it does not reliably push
+    ; a return value -- confirmed by testing a minimal script where the
+    ; relaunched process exits via Quit from .onInit, exactly what
+    ; /CLEANUPPATH's handler does. An earlier version of this code popped
+    ; anyway, which -- with nothing on the stack -- corrupted it (NSIS's
+    ; stack is global and shared for the rest of the script) and set
+    ; ${Errors} as a side effect of the failed pop itself, tripping the
+    ; "administrator rights required" branch below on every successful run
+    ; and quitting before the actual install ever happened. ${Errors} alone,
+    ; set directly by ExecShellWait when the elevated relaunch fails to
+    ; launch at all (e.g. the UAC prompt is declined), is the same check
+    ; already used for the plain ExecShell "runas" relaunch above -- no Pop
+    ; there either.
     ReadRegStr $0 HKLM "${UNINST_KEY}" "InstallLocation"
     ${If} $0 != ""
     ${AndIf} ${FileExists} "$0\uninstall.exe"
       ClearErrors
       ExecShellWait "runas" "$EXEPATH" '/CLEANUPPATH="$0"'
-      Pop $1
       ${If} ${Errors}
-      ${OrIf} $1 == "error"
         MessageBox MB_OK|MB_ICONEXCLAMATION \
           "Administrator rights are required to remove the existing all-users installation before continuing.$\r$\n$\r$\nRestart the installer and accept the elevation prompt, or uninstall the existing Aseprite installation manually first."
         Quit
