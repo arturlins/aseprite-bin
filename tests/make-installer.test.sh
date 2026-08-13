@@ -88,9 +88,16 @@ has "SHCTX" \
 
 # --- UAC shield on the scope page's Next button -----------------------------
 
-has "!define BCM_SETSHIELD 0x0000160C" \
-  && check "define nativo BCM_SETSHIELD (sem plugin UAC.dll de terceiro)" 1 \
-  || check "define nativo BCM_SETSHIELD (sem plugin UAC.dll de terceiro)" 0 "BCM_SETSHIELD nao encontrado"
+has "!include \"WinMessages.nsh\"" \
+  && check "WinMessages.nsh incluido (fonte nativa de BCM_SETSHIELD, sem plugin UAC.dll de terceiro)" 1 \
+  || check "WinMessages.nsh incluido (fonte nativa de BCM_SETSHIELD, sem plugin UAC.dll de terceiro)" 0 'include WinMessages.nsh nao encontrado'
+
+if grep -qF "!define BCM_SETSHIELD" "$NSI"; then
+  check "BCM_SETSHIELD nao e redefinido (WinMessages.nsh ja define -- redefinir e erro de compilacao no makensis)" 0 \
+    "installer.nsi redefine BCM_SETSHIELD, colide com WinMessages.nsh"
+else
+  check "BCM_SETSHIELD nao e redefinido (WinMessages.nsh ja define -- redefinir e erro de compilacao no makensis)" 1
+fi
 
 has "GetDlgItem \$0 \$HWNDPARENT 1" \
   && check "pega o botao Next do wizard para aplicar o escudo" 1 \

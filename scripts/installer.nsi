@@ -53,7 +53,10 @@ RequestExecutionLevel user
 !define MUI_ABORTWARNING
 !define MUI_ICON "${ICONFILE}"
 !define MUI_UNICON "${ICONFILE}"
-!define BCM_SETSHIELD 0x0000160C
+; BCM_SETSHIELD itself comes from WinMessages.nsh (already !included above),
+; not redefined here -- NSIS treats a second !define of the same name as a
+; hard compile error ("already defined"), caught only by actually running
+; makensis, which the static grep-based test suite cannot do.
 
 Var Scope                 ; "all" or "user", decided on the scope page
 Var ScopeAllUsersRadio
